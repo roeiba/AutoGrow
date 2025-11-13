@@ -54,12 +54,12 @@ class ProjectBriefValidator:
     """Validator for PROJECT_BRIEF.md format and content"""
 
     # Required sections in PROJECT_BRIEF.md
+    # Note: Section names can have variations (e.g., "Core Features" or "Core Requirements")
     REQUIRED_SECTIONS = [
         "Project Overview",
-        "Core Requirements",
-        "Technical Preferences",
-        "User Roles & Permissions",
-        "Key User Flows"
+        "Core Requirements",  # Also accepts: "Core Features"
+        "Technical Preferences",  # Also accepts: "Technical Requirements"
+        "Success Criteria"
     ]
 
     # Optional but recommended sections
@@ -137,6 +137,9 @@ class ProjectBriefValidator:
         # Validate requirements section
         self._validate_requirements_section(content, result)
 
+        # Validate success criteria section
+        self._validate_success_criteria_section(content, result)
+
         # Check for common issues
         self._check_common_issues(content, result)
 
@@ -149,12 +152,30 @@ class ProjectBriefValidator:
 
         result.metadata['sections_found'] = headers
 
-        # Check required sections
+        # Define section variations that are acceptable
+        section_variations = {
+            "Project Overview": ["Project Overview", "Overview"],
+            "Core Requirements": ["Core Requirements", "Core Features", "Features", "Requirements"],
+            "Technical Preferences": ["Technical Preferences", "Technical Requirements", "Tech Stack", "Technology Stack"],
+            "Success Criteria": ["Success Criteria", "Acceptance Criteria", "Definition of Done"]
+        }
+
+        # Check required sections (accepting variations)
         for required_section in self.REQUIRED_SECTIONS:
-            # Use emoji-agnostic matching
-            pattern = re.compile(r'##\s+[🎯📋🏗️👥🔄]?\s*' + re.escape(required_section), re.IGNORECASE)
-            if not pattern.search(content):
-                result.add_error(f"Missing required section: '{required_section}'")
+            variations = section_variations.get(required_section, [required_section])
+            found = False
+
+            for variation in variations:
+                # Use emoji-agnostic matching
+                pattern = re.compile(r'##\s+[🎯📋🏗️👥🔄✅]?\s*' + re.escape(variation), re.IGNORECASE)
+                if pattern.search(content):
+                    found = True
+                    break
+
+            if not found:
+                # Show all acceptable variations in error message
+                variations_str = "', '".join(variations)
+                result.add_error(f"Missing required section: '{required_section}' (also accepts: '{variations_str}')")
 
         # Check recommended sections
         for recommended_section in self.RECOMMENDED_SECTIONS:
@@ -194,15 +215,19 @@ class ProjectBriefValidator:
 
     def _validate_overview_section(self, content: str, result: ValidationResult):
         """Validate Project Overview section"""
-        # Extract overview section
-        overview_match = re.search(
-            r'##\s+[🎯]?\s*Project Overview\s*\n(.*?)(?=\n##|\Z)',
-            content,
-            re.DOTALL | re.IGNORECASE
-        )
+        # Try different variations
+        overview_match = None
+        for section_name in ["Project Overview", "Overview"]:
+            overview_match = re.search(
+                r'##\s+[🎯]?\s*' + re.escape(section_name) + r'\s*\n(.*?)(?=\n##|\Z)',
+                content,
+                re.DOTALL | re.IGNORECASE
+            )
+            if overview_match:
+                break
 
         if not overview_match:
-            result.add_error("Could not parse Project Overview section")
+            result.add_error("Could not parse Project Overview/Overview section")
             return
 
         overview_content = overview_match.group(1)
@@ -231,15 +256,20 @@ class ProjectBriefValidator:
                     )
 
     def _validate_requirements_section(self, content: str, result: ValidationResult):
-        """Validate Core Requirements section"""
-        requirements_match = re.search(
-            r'##\s+[📋]?\s*Core Requirements\s*\n(.*?)(?=\n##|\Z)',
-            content,
-            re.DOTALL | re.IGNORECASE
-        )
+        """Validate Core Requirements/Features section"""
+        # Try different variations
+        requirements_match = None
+        for section_name in ["Core Requirements", "Core Features", "Features", "Requirements"]:
+            requirements_match = re.search(
+                r'##\s+[📋]?\s*' + re.escape(section_name) + r'\s*\n(.*?)(?=\n##|\Z)',
+                content,
+                re.DOTALL | re.IGNORECASE
+            )
+            if requirements_match:
+                break
 
         if not requirements_match:
-            result.add_error("Could not parse Core Requirements section")
+            result.add_error("Could not parse Core Requirements/Features section")
             return
 
         requirements_content = requirements_match.group(1)
@@ -269,6 +299,47 @@ class ProjectBriefValidator:
                 f"Only {functional_reqs} requirements found. Consider adding more specific requirements."
             )
 
+    def _validate_success_criteria_section(self, content: str, result: ValidationResult):
+        """Validate Success Criteria section"""
+        # Try different variations
+        success_criteria_match = None
+        for section_name in ["Success Criteria", "Acceptance Criteria", "Definition of Done"]:
+            success_criteria_match = re.search(
+                r'##\s+[✅]?\s*' + re.escape(section_name) + r'\s*\n(.*?)(?=\n##|\Z)',
+                content,
+                re.DOTALL | re.IGNORECASE
+            )
+            if success_criteria_match:
+                break
+
+        if not success_criteria_match:
+            result.add_error("Could not parse Success Criteria section")
+            return
+
+        success_criteria_content = success_criteria_match.group(1)
+
+        # Check minimum length
+        MIN_SUCCESS_CRITERIA_LENGTH = 50
+        if len(success_criteria_content.strip()) < MIN_SUCCESS_CRITERIA_LENGTH:
+            result.add_error(
+                f"Success Criteria section is too short ({len(success_criteria_content.strip())} chars). "
+                f"Minimum recommended: {MIN_SUCCESS_CRITERIA_LENGTH} characters"
+            )
+
+        # Count criteria items (numbered or bulleted lists)
+        criteria_items = len(re.findall(r'^\s*[\d\-\*]+\.?\s+', success_criteria_content, re.MULTILINE))
+
+        if criteria_items == 0:
+            result.add_warning(
+                "Success Criteria section has no measurable criteria items. "
+                "Consider adding specific, measurable success metrics."
+            )
+        elif criteria_items < 3:
+            result.add_warning(
+                f"Only {criteria_items} success criteria found. "
+                "Consider adding more specific and measurable criteria."
+            )
+
     def _check_common_issues(self, content: str, result: ValidationResult):
         """Check for common issues and anti-patterns"""
         # Check for excessively long lines
@@ -281,8 +352,18 @@ class ProjectBriefValidator:
                 "Consider breaking them up for readability."
             )
 
-        # Check for empty sections
-        empty_sections = re.findall(r'##\s+(.+)\s*\n\s*\n##', content)
+        # Check for empty sections (sections with no content before the next section)
+        # Look for ## headers followed by only whitespace and then another ## header
+        # Exclude cases where there's a ### subsection
+        empty_sections = []
+        section_pattern = re.compile(r'##\s+(.+?)\s*\n(.*?)(?=\n##|\Z)', re.DOTALL)
+        for match in section_pattern.finditer(content):
+            section_name = match.group(1)
+            section_content = match.group(2).strip()
+            # Check if section is truly empty (no content, not even subsections)
+            if not section_content or (section_content and not re.search(r'\S', section_content)):
+                empty_sections.append(section_name)
+
         if empty_sections:
             result.add_error(
                 f"Found empty sections: {', '.join(empty_sections[:3])}"

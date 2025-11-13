@@ -1,8 +1,9 @@
-anthropic>=0.18.0
+claude-agent-sdk>=0.1.0
 PyGithub>=2.1.1
 requests>=2.31.0
 python-dotenv>=1.0.0
 gitpython>=3.1.40
+anyio>=4.0.0
 
 # Development dependencies
 pytest>=7.4.0

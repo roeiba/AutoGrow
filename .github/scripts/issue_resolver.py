@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
 Issue Resolver Agent
-Takes an open issue, analyzes it with Claude AI, implements a fix, and creates a PR
+Takes an open issue, analyzes it with Claude AI using Agent SDK, implements a fix, and creates a PR
 """
 
 import os
 import sys
-import json
 import time
+import anyio
 from datetime import datetime
+from pathlib import Path
 from github import Github, Auth
-from anthropic import Anthropic
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 import git
 
 # Configuration
@@ -32,45 +33,49 @@ auth = Auth.Token(GITHUB_TOKEN)
 gh = Github(auth=auth)
 repo = gh.get_repo(REPO_NAME)
 print(f"✅ Connected to repository: {REPO_NAME}")
-anthropic = Anthropic(api_key=ANTHROPIC_API_KEY)
+
 git_repo = git.Repo('.')
 
-# Select issue
-selected_issue = None
 
-if SPECIFIC_ISSUE:
-    print(f"🎯 Working on specific issue #{SPECIFIC_ISSUE}")
-    selected_issue = repo.get_issue(int(SPECIFIC_ISSUE))
-else:
-    print("🔍 Searching for issue to resolve...")
-    open_issues = repo.get_issues(state='open', sort='created', direction='asc')
+async def resolve_issue():
+    """Use Claude Agent SDK to resolve an issue"""
     
-    for issue in open_issues:
-        if issue.pull_request:
-            continue
+    # Select issue
+    selected_issue = None
+    
+    if SPECIFIC_ISSUE:
+        print(f"🎯 Working on specific issue #{SPECIFIC_ISSUE}")
+        selected_issue = repo.get_issue(int(SPECIFIC_ISSUE))
+    else:
+        print("🔍 Searching for issue to resolve...")
+        open_issues = repo.get_issues(state='open', sort='created', direction='asc')
         
-        issue_labels = [label.name for label in issue.labels]
-        if any(skip_label in issue_labels for skip_label in LABELS_TO_SKIP):
-            continue
-        
-        if LABELS_TO_HANDLE and not any(handle_label in issue_labels for handle_label in LABELS_TO_HANDLE):
-            continue
-        
-        comments = list(issue.get_comments())
-        if any('Issue Resolver Agent' in c.body and 'claimed' in c.body.lower() for c in comments):
-            continue
-        
-        selected_issue = issue
-        break
-
-if not selected_issue:
-    print("ℹ️  No suitable issues found")
-    sys.exit(0)
-
-print(f"✅ Selected issue #{selected_issue.number}: {selected_issue.title}")
-
-# Claim the issue
-claim_message = f"""🤖 **Issue Resolver Agent**
+        for issue in open_issues:
+            if issue.pull_request:
+                continue
+            
+            issue_labels = [label.name for label in issue.labels]
+            if any(skip_label in issue_labels for skip_label in LABELS_TO_SKIP):
+                continue
+            
+            if LABELS_TO_HANDLE and not any(handle_label in issue_labels for handle_label in LABELS_TO_HANDLE):
+                continue
+            
+            comments = list(issue.get_comments())
+            if any('Issue Resolver Agent' in c.body and 'claimed' in c.body.lower() for c in comments):
+                continue
+            
+            selected_issue = issue
+            break
+    
+    if not selected_issue:
+        print("ℹ️  No suitable issues found")
+        return
+    
+    print(f"✅ Selected issue #{selected_issue.number}: {selected_issue.title}")
+    
+    # Claim the issue
+    claim_message = f"""🤖 **Issue Resolver Agent**
 
 I'm working on this issue now.
 
@@ -79,22 +84,22 @@ I'm working on this issue now.
 
 ---
 *Automated by GitHub Actions*"""
-
-selected_issue.create_comment(claim_message)
-selected_issue.add_to_labels('in-progress')
-print("📝 Claimed issue")
-
-# Get context
-try:
-    readme = repo.get_readme().decoded_content.decode('utf-8')[:2000]
-except:
-    readme = "No README found"
-
-issue_body = selected_issue.body or "No description provided"
-issue_labels = [label.name for label in selected_issue.labels]
-
-# Build prompt
-prompt = f"""You are an expert software engineer fixing a GitHub issue.
+    
+    selected_issue.create_comment(claim_message)
+    selected_issue.add_to_labels('in-progress')
+    print("📝 Claimed issue")
+    
+    # Get context
+    try:
+        readme = repo.get_readme().decoded_content.decode('utf-8')[:2000]
+    except:
+        readme = "No README found"
+    
+    issue_body = selected_issue.body or "No description provided"
+    issue_labels = [label.name for label in selected_issue.labels]
+    
+    # Build prompt for Claude
+    prompt = f"""You are an expert software engineer. Fix this GitHub issue by modifying the necessary files.
 
 Repository: {REPO_NAME}
 Issue #{selected_issue.number}: {selected_issue.title}
@@ -104,178 +109,142 @@ Description:
 
 Labels: {', '.join(issue_labels)}
 
-Context:
+Context from README:
 {readme}
 
-Provide a fix in JSON format. Keep file content concise.
-{{
-  "analysis": "Brief analysis (max 200 chars)",
-  "files_to_modify": [
-    {{
-      "path": "relative/path/to/file",
-      "action": "create|modify|delete",
-      "content": "Complete file content",
-      "explanation": "Brief explanation (max 100 chars)"
-    }}
-  ],
-  "pr_title": "Concise PR title (max 80 chars)",
-  "pr_body": "Brief PR description (max 300 chars)"
-}}
+Instructions:
+1. Analyze the issue carefully
+2. Use the Read tool to examine relevant files
+3. Use the Write tool to create or modify files with your fixes
+4. Make complete, working changes
+5. After making changes, summarize what you did
 
-IMPORTANT: Output ONLY the JSON object, no markdown. Keep all text fields brief."""
+You have access to Read and Write tools to modify files in the current directory."""
 
-print(f"📝 Prompt length: {len(prompt)} chars")
-
-# Call Claude
-print("🤖 Calling Claude AI...")
-try:
-    message = anthropic.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=8192,
-        messages=[{"role": "user", "content": prompt}]
+    print(f"📝 Prompt length: {len(prompt)} chars")
+    
+    # Create branch
+    branch_name = f"fix/issue-{selected_issue.number}-{int(time.time())}"
+    print(f"🌿 Creating branch: {branch_name}")
+    try:
+        git_repo.git.checkout('-b', branch_name)
+        print(f"✅ Branch created: {branch_name}")
+    except Exception as e:
+        print(f"❌ Failed to create branch: {e}")
+        selected_issue.create_comment(f"❌ Failed to create branch: {e}")
+        selected_issue.remove_from_labels('in-progress')
+        return
+    
+    # Configure Claude Agent SDK with Read/Write tools
+    options = ClaudeAgentOptions(
+        system_prompt="You are a helpful software engineer. Use Read and Write tools to fix issues. Always make complete, working changes.",
+        allowed_tools=["Read", "Write"],
+        permission_mode='acceptEdits',  # Auto-accept file edits
+        cwd=str(Path.cwd()),  # Work in current directory
+        max_turns=10,
+        api_key=ANTHROPIC_API_KEY
     )
     
-    response_text = message.content[0].text
-    print(f"✅ Received solution ({len(response_text)} chars)")
-    print(f"📊 Token usage - Input: {message.usage.input_tokens}, Output: {message.usage.output_tokens}")
-except Exception as e:
-    print(f"❌ Claude API error: {e}")
-    selected_issue.create_comment(f"❌ Failed to call Claude API: {e}")
-    selected_issue.remove_from_labels('in-progress')
-    sys.exit(1)
+    print("🤖 Starting Claude Agent with Read/Write tools...")
+    
+    files_modified = []
+    summary = ""
+    
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            # Send the query
+            await client.query(prompt)
+            
+            # Receive and process responses
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            summary += block.text + "\n"
+                            print(f"Claude: {block.text[:200]}...")
+        
+        print(f"✅ Claude completed work")
+        print(f"📊 Summary length: {len(summary)} chars")
+        
+    except Exception as e:
+        print(f"❌ Claude Agent error: {e}")
+        import traceback
+        traceback.print_exc()
+        selected_issue.create_comment(f"❌ Failed to generate fix: {e}")
+        selected_issue.remove_from_labels('in-progress')
+        return
+    
+    # Check if any files were modified
+    if git_repo.is_dirty(untracked_files=True):
+        # Get list of changed files
+        changed_files = [item.a_path for item in git_repo.index.diff(None)]
+        untracked_files = git_repo.untracked_files
+        files_modified = changed_files + untracked_files
+        
+        print(f"📝 Files modified: {len(files_modified)}")
+        for f in files_modified:
+            print(f"  ✏️  {f}")
+        
+        # Commit changes
+        git_repo.git.add('-A')
+        commit_message = f"""Fix: Resolve issue #{selected_issue.number}
 
-# Parse response
-try:
-    print("🔍 Parsing Claude response...")
-    
-    # Clean up response - remove markdown code blocks if present
-    cleaned_response = response_text.strip()
-    if "```json" in cleaned_response:
-        cleaned_response = cleaned_response.split("```json")[1].split("```")[0].strip()
-        print("📝 Removed ```json``` markers")
-    elif "```" in cleaned_response:
-        cleaned_response = cleaned_response.split("```")[1].split("```")[0].strip()
-        print("📝 Removed ``` markers")
-    
-    # Find JSON object in response
-    start_idx = cleaned_response.find('{')
-    end_idx = cleaned_response.rfind('}') + 1
-    
-    if start_idx == -1 or end_idx == 0:
-        raise ValueError("No JSON object found in response")
-    
-    json_str = cleaned_response[start_idx:end_idx]
-    print(f"📊 Extracted JSON: {len(json_str)} chars")
-    
-    solution = json.loads(json_str)
-    print("✅ Successfully parsed JSON")
-    
-except json.JSONDecodeError as e:
-    print(f"❌ Failed to parse response: {e}")
-    print(f"📄 Response (first 1000 chars): {response_text[:1000]}")
-    print(f"📄 Response (last 500 chars): {response_text[-500:]}")
-    selected_issue.create_comment(f"❌ Failed to parse AI response. JSON error: {e}\n\nWill retry later.")
-    selected_issue.remove_from_labels('in-progress')
-    sys.exit(1)
-except ValueError as e:
-    print(f"❌ Value error: {e}")
-    print(f"📄 Response: {response_text[:1000]}")
-    selected_issue.create_comment(f"❌ Invalid response format: {e}")
-    selected_issue.remove_from_labels('in-progress')
-    sys.exit(1)
-
-# Create branch
-branch_name = f"fix/issue-{selected_issue.number}-{int(time.time())}"
-print(f"🌿 Creating branch: {branch_name}")
-try:
-    git_repo.git.checkout('-b', branch_name)
-    print(f"✅ Branch created: {branch_name}")
-except Exception as e:
-    print(f"❌ Failed to create branch: {e}")
-    selected_issue.create_comment(f"❌ Failed to create branch: {e}")
-    selected_issue.remove_from_labels('in-progress')
-    sys.exit(1)
-
-# Apply changes
-print(f"📝 Applying {len(solution.get('files_to_modify', []))} file changes...")
-files_modified = []
-for file_change in solution.get('files_to_modify', []):
-    file_path = file_change.get('path')
-    action = file_change.get('action', 'modify')
-    content = file_change.get('content', '')
-    
-    if not file_path:
-        continue
-    
-    full_path = os.path.join('.', file_path)
-    
-    if action == 'delete':
-        if os.path.exists(full_path):
-            os.remove(full_path)
-            files_modified.append(f"Deleted: {file_path}")
-            print(f"  🗑️  Deleted: {file_path}")
-    else:
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, 'w') as f:
-            f.write(content)
-        files_modified.append(f"{action.capitalize()}: {file_path}")
-        print(f"  ✏️  {action.capitalize()}: {file_path} ({len(content)} chars)")
-
-if not files_modified:
-    print("⚠️  No files modified")
-    selected_issue.create_comment("⚠️ No changes generated.")
-    selected_issue.remove_from_labels('in-progress')
-    sys.exit(0)
-
-# Commit
-git_repo.git.add('-A')
-commit_message = f"""Fix: {solution.get('pr_title', f'Resolve issue #{selected_issue.number}')}
+{selected_issue.title}
 
 Closes #{selected_issue.number}
 
 ---
-Generated by Issue Resolver Agent"""
-
-git_repo.index.commit(commit_message)
-print("✅ Committed")
-
-# Push
-origin = git_repo.remote('origin')
-origin.push(branch_name)
-print(f"✅ Pushed branch")
-
-# Create PR
-pr_title = solution.get('pr_title', f"Fix: Resolve issue #{selected_issue.number}")
-pr_body = f"""{solution.get('pr_body', '')}
+Generated by Issue Resolver Agent using Claude Agent SDK"""
+        
+        git_repo.index.commit(commit_message)
+        print("✅ Committed changes")
+        
+        # Push
+        origin = git_repo.remote('origin')
+        origin.push(branch_name)
+        print(f"✅ Pushed branch: {branch_name}")
+        
+        # Create PR
+        pr_title = f"Fix: {selected_issue.title}"
+        pr_body = f"""{summary[:500]}
 
 ## Changes
-{chr(10).join(['- ' + f for f in files_modified])}
+{chr(10).join(['- ' + f for f in files_modified[:20]])}
 
 Closes #{selected_issue.number}
 
 ---
-*Generated by Issue Resolver Agent*"""
-
-pr = repo.create_pull(
-    title=pr_title,
-    body=pr_body,
-    head=branch_name,
-    base='main'
-)
-
-print(f"✅ Created PR #{pr.number}")
-
-# Update issue
-selected_issue.create_comment(f"""✅ **Solution Ready**
+*Generated by Issue Resolver Agent using Claude Agent SDK*"""
+        
+        pr = repo.create_pull(
+            title=pr_title,
+            body=pr_body,
+            head=branch_name,
+            base='main'
+        )
+        
+        print(f"✅ Created PR #{pr.number}")
+        
+        # Update issue
+        selected_issue.create_comment(f"""✅ **Solution Ready**
 
 Pull Request: #{pr.number}
 
 **Changes:**
-{chr(10).join(['- ' + f for f in files_modified])}
+{chr(10).join(['- ' + f for f in files_modified[:10]])}
 
 ---
 *Completed at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*""")
+        
+        selected_issue.remove_from_labels('in-progress')
+        
+        print("🎉 Complete!")
+        
+    else:
+        print("⚠️  No files were modified")
+        selected_issue.create_comment("⚠️ No changes were made. The issue may need manual review.")
+        selected_issue.remove_from_labels('in-progress')
 
-selected_issue.remove_from_labels('in-progress')
 
-print("🎉 Complete!")
+# Run the async function
+anyio.run(resolve_issue)

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
 Issue Generator Agent
-Ensures minimum number of open issues by generating new ones with Claude AI
+Ensures minimum number of open issues by generating new ones with Claude AI using Agent SDK
 """
 
 import os
 import sys
 import json
+import anyio
 from github import Github, Auth
-from anthropic import Anthropic
+from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
 
 # Configuration
 MIN_ISSUES = int(os.getenv('MIN_OPEN_ISSUES', '3'))
@@ -38,22 +39,23 @@ if issue_count >= MIN_ISSUES:
 needed = MIN_ISSUES - issue_count
 print(f"🤖 Generating {needed} new issue(s)...")
 
-# Initialize Claude
-anthropic = Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# Get repository context
-print("📖 Analyzing repository for potential issues...")
-
-try:
-    readme = repo.get_readme().decoded_content.decode('utf-8')[:1000]
-except:
-    readme = "No README found"
-
-recent_commits = list(repo.get_commits()[:5])
-commit_messages = "\n".join([f"- {c.commit.message.split(chr(10))[0]}" for c in recent_commits])
-
-# Build prompt for Claude
-prompt = f"""You are analyzing a GitHub repository to suggest issues.
+async def generate_issues():
+    """Use Claude Agent SDK to generate issues"""
+    
+    # Get repository context
+    print("📖 Analyzing repository for potential issues...")
+    
+    try:
+        readme = repo.get_readme().decoded_content.decode('utf-8')[:1000]
+    except:
+        readme = "No README found"
+    
+    recent_commits = list(repo.get_commits()[:5])
+    commit_messages = "\n".join([f"- {c.commit.message.split(chr(10))[0]}" for c in recent_commits])
+    
+    # Build prompt for Claude
+    prompt = f"""Analyze this GitHub repository and suggest {needed} new issue(s).
 
 Repository: {REPO_NAME}
 
@@ -66,89 +68,104 @@ Recent commits:
 Current open issues:
 {chr(10).join([f"- #{i.number}: {i.title}" for i in open_issues[:10]])}
 
-Task: Generate {needed} new issue(s) for this repository. Prioritize:
-1. Bug fixes (if you can identify potential bugs from the code/docs)
-2. Feature enhancements (if no bugs found)
+Generate {needed} realistic, actionable issue(s). Prioritize:
+1. Bug fixes (if you can identify potential bugs)
+2. Feature enhancements
 3. Documentation improvements
 4. Code quality improvements
 
-For each issue, provide:
-- Title (clear and concise, max 80 chars)
-- Description (brief, max 200 chars)
-- Labels (choose from: bug, enhancement, documentation, good first issue)
-
-Respond ONLY with valid JSON, no markdown formatting:
+Respond with ONLY a JSON object in this exact format:
 {{
   "issues": [
     {{
-      "title": "Issue title",
-      "body": "Brief description",
+      "title": "Brief title (max 80 chars)",
+      "body": "Description (max 300 chars)",
       "labels": ["bug"]
     }}
   ]
 }}
 
-IMPORTANT: Keep descriptions brief. Output ONLY the JSON object, nothing else."""
+Keep descriptions brief and output ONLY the JSON, nothing else."""
 
-# Call Claude
-message = anthropic.messages.create(
-    model="claude-sonnet-4-5",
-    max_tokens=4096,
-    messages=[{"role": "user", "content": prompt}]
-)
+    print(f"📝 Prompt length: {len(prompt)} chars")
+    
+    # Configure Claude Agent SDK
+    options = ClaudeAgentOptions(
+        system_prompt="You are a helpful GitHub issue generator. Always respond with valid JSON only.",
+        max_turns=1,
+        api_key=ANTHROPIC_API_KEY
+    )
+    
+    response_text = ""
+    
+    print("🤖 Calling Claude AI...")
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    response_text += block.text
+    
+    print(f"✅ Received response ({len(response_text)} chars)")
+    
+    # Parse response
+    try:
+        print("🔍 Parsing Claude response...")
+        
+        # Clean up response - remove markdown code blocks if present
+        cleaned_response = response_text.strip()
+        if "```json" in cleaned_response:
+            cleaned_response = cleaned_response.split("```json")[1].split("```")[0].strip()
+            print("📝 Removed ```json``` markers")
+        elif "```" in cleaned_response:
+            cleaned_response = cleaned_response.split("```")[1].split("```")[0].strip()
+            print("📝 Removed ``` markers")
+        
+        # Find JSON object in response
+        start_idx = cleaned_response.find('{')
+        end_idx = cleaned_response.rfind('}') + 1
+        
+        if start_idx == -1 or end_idx == 0:
+            raise ValueError("No JSON object found in response")
+        
+        json_str = cleaned_response[start_idx:end_idx]
+        print(f"📊 Extracted JSON: {len(json_str)} chars")
+        
+        data = json.loads(json_str)
+        issues_to_create = data.get('issues', [])[:needed]
+        
+        if not issues_to_create:
+            print("⚠️  No issues generated by Claude")
+            return
+        
+        # Create issues
+        for issue_data in issues_to_create:
+            title = issue_data.get('title', 'Untitled Issue')[:80]  # Limit title length
+            body = issue_data.get('body', '')
+            labels = issue_data.get('labels', [])
+            
+            full_body = f"{body}\n\n---\n*Generated by Issue Generator Agent*"
+            
+            new_issue = repo.create_issue(
+                title=title,
+                body=full_body,
+                labels=labels
+            )
+            
+            print(f"✅ Created issue #{new_issue.number}: {title}")
+        
+        print(f"🎉 Successfully generated {len(issues_to_create)} issue(s)")
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ Failed to parse Claude response as JSON: {e}")
+        print(f"Response (first 1000 chars): {response_text[:1000]}")
+        print(f"Response (last 500 chars): {response_text[-500:]}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error creating issues: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
-response_text = message.content[0].text
-print(f"🤖 Claude response received")
 
-# Parse response
-try:
-    # Clean up response - remove markdown code blocks if present
-    cleaned_response = response_text.strip()
-    if "```json" in cleaned_response:
-        cleaned_response = cleaned_response.split("```json")[1].split("```")[0].strip()
-    elif "```" in cleaned_response:
-        cleaned_response = cleaned_response.split("```")[1].split("```")[0].strip()
-    
-    # Find JSON object in response
-    start_idx = cleaned_response.find('{')
-    end_idx = cleaned_response.rfind('}') + 1
-    
-    if start_idx == -1 or end_idx == 0:
-        raise ValueError("No JSON object found in response")
-    
-    json_str = cleaned_response[start_idx:end_idx]
-    data = json.loads(json_str)
-    issues_to_create = data.get('issues', [])[:needed]
-    
-    if not issues_to_create:
-        print("⚠️  No issues generated by Claude")
-        sys.exit(0)
-    
-    # Create issues
-    for issue_data in issues_to_create:
-        title = issue_data.get('title', 'Untitled Issue')[:80]  # Limit title length
-        body = issue_data.get('body', '')
-        labels = issue_data.get('labels', [])
-        
-        full_body = f"{body}\n\n---\n*Generated by Issue Generator Agent*"
-        
-        new_issue = repo.create_issue(
-            title=title,
-            body=full_body,
-            labels=labels
-        )
-        
-        print(f"✅ Created issue #{new_issue.number}: {title}")
-    
-    print(f"🎉 Successfully generated {len(issues_to_create)} issue(s)")
-    
-except json.JSONDecodeError as e:
-    print(f"❌ Failed to parse Claude response as JSON: {e}")
-    print(f"Response (first 1000 chars): {response_text[:1000]}")
-    print(f"Response (last 500 chars): {response_text[-500:]}")
-    sys.exit(1)
-except Exception as e:
-    print(f"❌ Error creating issues: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+# Run the async function
+anyio.run(generate_issues)

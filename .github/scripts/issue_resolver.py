@@ -60,6 +60,7 @@ async def resolve_issue():
     
     # Select issue
     selected_issue = None
+    issue_claimed = False  # Track if we claimed the issue
     
     if SPECIFIC_ISSUE:
         print(f"🎯 Working on specific issue #{SPECIFIC_ISSUE}")
@@ -105,6 +106,7 @@ I'm working on this issue now.
     
     selected_issue.create_comment(claim_message)
     selected_issue.add_to_labels('in-progress')
+    issue_claimed = True  # Mark that we claimed it
     print("📝 Claimed issue")
     
     # Get context
@@ -149,19 +151,35 @@ You have access to Read and Write tools to modify files in the current directory
         print(f"✅ Branch created: {branch_name}")
     except Exception as e:
         print(f"❌ Failed to create branch: {e}")
-        selected_issue.create_comment(f"❌ Failed to create branch: {e}")
-        selected_issue.remove_from_labels('in-progress')
+        if issue_claimed:
+            selected_issue.create_comment(f"❌ Failed to create branch: {e}")
+            selected_issue.remove_from_labels('in-progress')
         return
     
     # Configure Claude Agent SDK with Read/Write tools
-    options = ClaudeAgentOptions(
-        system_prompt="You are a helpful software engineer. Use Read and Write tools to fix issues. Always make complete, working changes.",
-        allowed_tools=["Read", "Write"],
-        permission_mode='acceptEdits',  # Auto-accept file edits
-        cwd=str(Path.cwd()),  # Work in current directory
-        max_turns=10,
-        api_key=ANTHROPIC_API_KEY
-    )
+    # Note: api_key should be set via environment variable ANTHROPIC_API_KEY
+    try:
+        options = ClaudeAgentOptions(
+            system_prompt="You are a helpful software engineer. Use Read and Write tools to fix issues. Always make complete, working changes.",
+            allowed_tools=["Read", "Write"],
+            permission_mode='acceptEdits',  # Auto-accept file edits
+            cwd=str(Path.cwd()),  # Work in current directory
+            max_turns=10
+        )
+    except Exception as e:
+        print(f"❌ Failed to create ClaudeAgentOptions: {e}")
+        print("⚠️  Trying without optional parameters...")
+        try:
+            options = ClaudeAgentOptions(
+                system_prompt="You are a helpful software engineer. Fix the issue described.",
+                max_turns=10
+            )
+        except Exception as e2:
+            print(f"❌ Failed to create basic options: {e2}")
+            if issue_claimed:
+                selected_issue.create_comment(f"❌ Configuration error: {e2}")
+                selected_issue.remove_from_labels('in-progress')
+            return
     
     print("🤖 Starting Claude Agent with Read/Write tools...")
     
@@ -188,8 +206,9 @@ You have access to Read and Write tools to modify files in the current directory
         print(f"❌ Claude Agent error: {e}")
         import traceback
         traceback.print_exc()
-        selected_issue.create_comment(f"❌ Failed to generate fix: {e}")
-        selected_issue.remove_from_labels('in-progress')
+        if issue_claimed:
+            selected_issue.create_comment(f"❌ Failed to generate fix: {e}")
+            selected_issue.remove_from_labels('in-progress')
         return
     
     # Check if any files were modified
@@ -260,13 +279,20 @@ Pull Request: #{pr.number}
         
     else:
         print("⚠️  No files were modified")
-        selected_issue.create_comment("⚠️ No changes were made. The issue may need manual review.")
-        selected_issue.remove_from_labels('in-progress')
+        if issue_claimed:
+            selected_issue.create_comment("⚠️ No changes were made. The issue may need manual review.")
+            selected_issue.remove_from_labels('in-progress')
 
 
-# Run the async function
+# Run the async function with error handling
 if HAS_ANYIO:
-    anyio.run(resolve_issue)
+    try:
+        anyio.run(resolve_issue)
+    except Exception as e:
+        print(f"❌ Fatal error in issue resolver: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 else:
     print("❌ Error: anyio is required for async execution")
     print("Install with: pip install anyio")

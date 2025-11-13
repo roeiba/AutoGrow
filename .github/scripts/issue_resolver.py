@@ -12,22 +12,21 @@ from pathlib import Path
 from github import Github, Auth
 import git
 
-# Try to import Claude Agent SDK, fallback to anthropic
-try:
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
-    USE_AGENT_SDK = True
-except ImportError:
-    print("⚠️  claude_agent_sdk not available, using anthropic SDK")
-    from anthropic import Anthropic
-    USE_AGENT_SDK = False
+# Add src directory to path to import modules
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src' / 'claude-agent'))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-# Try to import anyio for async support
+# Import Claude CLI Agent
 try:
-    import anyio
-    HAS_ANYIO = True
+    from claude_cli_agent import ClaudeAgent
+    USE_CLAUDE_CLI = True
 except ImportError:
-    print("⚠️  anyio not available, using synchronous execution")
-    HAS_ANYIO = False
+    print("⚠️  claude_cli_agent not available, falling back to anthropic SDK")
+    from anthropic import Anthropic
+    USE_CLAUDE_CLI = False
+
+# Import validator
+from utils.project_brief_validator import validate_project_brief
 
 # Configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -55,8 +54,54 @@ print(f"✅ Connected to repository: {REPO_NAME}")
 git_repo = git.Repo('.')
 
 
-async def resolve_issue():
-    """Use Claude Agent SDK to resolve an issue"""
+def validate_project_brief_if_exists():
+    """
+    Validate PROJECT_BRIEF.md if it exists in the repository
+
+    Returns:
+        Tuple of (is_valid, validation_message)
+    """
+    project_brief_path = Path('PROJECT_BRIEF.md')
+
+    if not project_brief_path.exists():
+        print("ℹ️  No PROJECT_BRIEF.md found (optional)")
+        return True, None
+
+    print("📋 Validating PROJECT_BRIEF.md...")
+    result = validate_project_brief(project_brief_path)
+
+    if result.is_valid:
+        print("✅ PROJECT_BRIEF.md validation passed")
+        validation_msg = "✅ PROJECT_BRIEF.md validated successfully"
+
+        if result.warnings:
+            print(f"⚠️  Validation warnings: {len(result.warnings)}")
+            for warning in result.warnings[:3]:  # Show first 3 warnings
+                print(f"   - {warning}")
+            validation_msg += f"\n\n**Warnings ({len(result.warnings)}):**\n"
+            for warning in result.warnings[:5]:
+                validation_msg += f"- {warning}\n"
+
+        return True, validation_msg
+    else:
+        print("❌ PROJECT_BRIEF.md validation failed")
+        for error in result.errors[:5]:  # Show first 5 errors
+            print(f"   - {error}")
+
+        validation_msg = "❌ PROJECT_BRIEF.md validation failed\n\n**Errors:**\n"
+        for error in result.errors[:5]:
+            validation_msg += f"- {error}\n"
+
+        if result.warnings:
+            validation_msg += f"\n**Warnings:**\n"
+            for warning in result.warnings[:3]:
+                validation_msg += f"- {warning}\n"
+
+        return False, validation_msg
+
+
+def resolve_issue():
+    """Use Claude CLI Agent to resolve an issue"""
     
     # Select issue
     selected_issue = None
@@ -108,7 +153,23 @@ I'm working on this issue now.
     selected_issue.add_to_labels('in-progress')
     issue_claimed = True  # Mark that we claimed it
     print("📝 Claimed issue")
-    
+
+    # Validate PROJECT_BRIEF.md before proceeding
+    is_valid, validation_msg = validate_project_brief_if_exists()
+    if not is_valid:
+        print("❌ PROJECT_BRIEF.md validation failed - aborting to save API calls")
+        selected_issue.create_comment(
+            f"❌ **Pre-flight check failed**\n\n{validation_msg}\n\n"
+            "Please fix PROJECT_BRIEF.md validation errors before I can proceed.\n\n"
+            "---\n*Issue Resolver Agent*"
+        )
+        selected_issue.remove_from_labels('in-progress')
+        return
+
+    # Add validation success to issue comment if there was a validation
+    if validation_msg:
+        selected_issue.create_comment(validation_msg)
+
     # Get context
     try:
         readme = repo.get_readme().decoded_content.decode('utf-8')[:2000]
@@ -156,51 +217,34 @@ You have access to Read and Write tools to modify files in the current directory
             selected_issue.remove_from_labels('in-progress')
         return
     
-    # Configure Claude Agent SDK with Read/Write tools
-    # Note: api_key should be set via environment variable ANTHROPIC_API_KEY
-    try:
-        options = ClaudeAgentOptions(
-            system_prompt="You are a helpful software engineer. Use Read and Write tools to fix issues. Always make complete, working changes.",
-            allowed_tools=["Read", "Write"],
-            permission_mode='acceptEdits',  # Auto-accept file edits
-            cwd=str(Path.cwd()),  # Work in current directory
-            max_turns=10
-        )
-    except Exception as e:
-        print(f"❌ Failed to create ClaudeAgentOptions: {e}")
-        print("⚠️  Trying without optional parameters...")
-        try:
-            options = ClaudeAgentOptions(
-                system_prompt="You are a helpful software engineer. Fix the issue described.",
-                max_turns=10
-            )
-        except Exception as e2:
-            print(f"❌ Failed to create basic options: {e2}")
-            if issue_claimed:
-                selected_issue.create_comment(f"❌ Configuration error: {e2}")
-                selected_issue.remove_from_labels('in-progress')
-            return
-    
-    print("🤖 Starting Claude Agent with Read/Write tools...")
+    # Initialize Claude CLI Agent with Read/Write tools
+    print("🤖 Starting Claude CLI Agent with Read/Write tools...")
     
     files_modified = []
     summary = ""
     
     try:
-        async with ClaudeSDKClient(options=options) as client:
-            # Send the query
-            await client.query(prompt)
-            
-            # Receive and process responses
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            summary += block.text + "\n"
-                            print(f"Claude: {block.text[:200]}...")
+        # Create Claude CLI Agent with permission to edit files
+        agent = ClaudeAgent(
+            output_format="text",
+            verbose=True,
+            allowed_tools=["Read", "Write", "Bash"],
+            permission_mode="acceptEdits"
+        )
+        
+        # Send the query to Claude
+        print("📤 Sending query to Claude...")
+        result = agent.query(prompt)
+        
+        # Extract the response
+        if isinstance(result, dict) and "result" in result:
+            summary = result["result"]
+        else:
+            summary = str(result)
         
         print(f"✅ Claude completed work")
         print(f"📊 Summary length: {len(summary)} chars")
+        print(f"📝 Response preview: {summary[:300]}...")
         
     except Exception as e:
         print(f"❌ Claude Agent error: {e}")
@@ -284,16 +328,11 @@ Pull Request: #{pr.number}
             selected_issue.remove_from_labels('in-progress')
 
 
-# Run the async function with error handling
-if HAS_ANYIO:
-    try:
-        anyio.run(resolve_issue)
-    except Exception as e:
-        print(f"❌ Fatal error in issue resolver: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-else:
-    print("❌ Error: anyio is required for async execution")
-    print("Install with: pip install anyio")
+# Run the function with error handling
+try:
+    resolve_issue()
+except Exception as e:
+    print(f"❌ Fatal error in issue resolver: {e}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)

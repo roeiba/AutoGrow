@@ -18,7 +18,6 @@ class ClaudeAgent:
     """
     
     def __init__(
-        logger.info(f"Initializing ClaudeAgent")
         self,
         output_format: str = "json",
         verbose: bool = False,
@@ -367,15 +366,6 @@ class ClaudeAgent:
 def main():
     """Example usage of ClaudeAgent."""
     import sys
-
-# Logging
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from logging_config import get_logger
-
-logger = get_logger(__name__)
-
     
     try:
         agent = ClaudeAgent(verbose=True)

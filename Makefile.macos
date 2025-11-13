@@ -71,7 +71,7 @@ install-test-deps:
 		python3 -m pip install -r tests/requirements.txt; \
 		echo "✅ Test dependencies installed"; \
 	else \
-		echo "❌ Python 3 not found. Install from: https://www.python.org/"; \
+		echo "❌ Python 3 not found. Install with: brew install python3"; \
 		exit 1; \
 	fi
 
@@ -161,8 +161,8 @@ quick-test:
 ci: install-test-deps test-unit
 	@echo "✅ CI tests passed"
 
-# CI flow - complete CI setup and test
-ci-flow: install-test-deps install-gemini install-claude verify test-unit
+# CI flow - complete CI setup and test (skip CLI installs for unit tests)
+ci-flow: install-test-deps test-unit
 	@echo "✅ CI flow completed successfully"
 
 # CI integration flow - setup and run integration tests

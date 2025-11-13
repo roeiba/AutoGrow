@@ -73,8 +73,8 @@ install-gemini:
 install-test-deps:
 	@echo "📦 Installing Python test dependencies..."
 	@if command -v python3 >/dev/null 2>&1; then \
-		python3 -m pip install --upgrade pip --user; \
-		python3 -m pip install -r tests/requirements.txt --user; \
+		python3 -m pip install --upgrade pip; \
+		python3 -m pip install -r tests/requirements.txt; \
 		echo "✅ Test dependencies installed"; \
 	else \
 		echo "❌ Python 3 not found. Install with: sudo apt-get install python3 python3-pip"; \
@@ -167,8 +167,8 @@ quick-test:
 ci: install-test-deps test-unit
 	@echo "✅ CI tests passed"
 
-# CI flow - complete CI setup and test
-ci-flow: install-test-deps install-gemini install-claude verify test-unit
+# CI flow - complete CI setup and test (skip CLI installs for unit tests)
+ci-flow: install-test-deps test-unit
 	@echo "✅ CI flow completed successfully"
 
 # CI integration flow - setup and run integration tests

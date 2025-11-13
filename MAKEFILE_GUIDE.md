@@ -447,7 +447,7 @@ make show-os              # Show detected OS
 ```bash
 # 1. Clone repo
 git clone <repo-url>
-cd ai-project-template
+cd autoGrow
 
 # 2. Install dependencies
 make install

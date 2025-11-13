@@ -36,11 +36,11 @@ This guide provides detailed instructions for contributing to the template itsel
 ```bash
 # Fork the repository on GitHub
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/ai-project-template.git
-cd ai-project-template
+git clone https://github.com/YOUR_USERNAME/autoGrow.git
+cd autoGrow
 
 # Add upstream remote
-git remote add upstream https://github.com/roeiba/ai-project-template.git
+git remote add upstream https://github.com/roeiba/autoGrow.git
 
 # Create a branch
 git checkout -b feature/your-feature-name

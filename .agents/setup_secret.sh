@@ -8,16 +8,16 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
 fi
 
 echo ""
-echo "Setting secret in repository: roeiba/ai-project-template"
+echo "Setting secret in repository: roeiba/autoGrow"
 
 # Set the secret using gh CLI
-echo "$ANTHROPIC_API_KEY" | gh secret set ANTHROPIC_API_KEY --repo roeiba/ai-project-template
+echo "$ANTHROPIC_API_KEY" | gh secret set ANTHROPIC_API_KEY --repo roeiba/autoGrow
 
 if [ $? -eq 0 ]; then
     echo "✅ ANTHROPIC_API_KEY secret set successfully!"
     echo ""
     echo "You can verify it at:"
-    echo "https://github.com/roeiba/ai-project-template/settings/secrets/actions"
+    echo "https://github.com/roeiba/autoGrow/settings/secrets/actions"
 else
     echo "❌ Failed to set secret"
     exit 1

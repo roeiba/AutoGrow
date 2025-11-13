@@ -3,7 +3,7 @@
 > **The world's first FULLY AUTONOMOUS, SELF-GROWING software project.**  
 > Fork it. Set your keys. Commit. **Watch it grow forever.**
 
-[![GitHub stars](https://img.shields.io/github/stars/roeiba/ai-project-template?style=social)](https://github.com/roeiba/ai-project-template)
+[![GitHub stars](https://img.shields.io/github/stars/roeiba/autoGrow?style=social)](https://github.com/roeiba/autoGrow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
@@ -74,7 +74,7 @@ Result: Your project writes itself, continuously, forever.
 ## 📁 What You Get
 
 ```
-ai-project-template/
+autoGrow/
 │
 ├── PROJECT_BRIEF.md              ⭐ Fill this with your requirements
 ├── .agents/                      🤖 AI guidelines (for AI agents)
@@ -251,8 +251,8 @@ MIT License - use freely in your projects. See [LICENSE](LICENSE) for details.
 
 ## 💬 Support
 
-- **Questions?** Check [QUICKSTART.md](QUICKSTART.md) or open a [Discussion](https://github.com/roeiba/ai-project-template/discussions)
-- **Bug Reports:** Open an [Issue](https://github.com/roeiba/ai-project-template/issues)
+- **Questions?** Check [QUICKSTART.md](QUICKSTART.md) or open a [Discussion](https://github.com/roeiba/autoGrow/discussions)
+- **Bug Reports:** Open an [Issue](https://github.com/roeiba/autoGrow/issues)
 - **Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 🙏 Acknowledgments
@@ -267,6 +267,6 @@ Built on best practices from Clean Architecture, Domain-Driven Design, and The T
 
 *Where human creativity meets AI capability*
 
-[⭐ Star](https://github.com/roeiba/ai-project-template) · [Report Issue](https://github.com/roeiba/ai-project-template/issues) · [Discussions](https://github.com/roeiba/ai-project-template/discussions)
+[⭐ Star](https://github.com/roeiba/autoGrow) · [Report Issue](https://github.com/roeiba/autoGrow/issues) · [Discussions](https://github.com/roeiba/autoGrow/discussions)
 
 </div>

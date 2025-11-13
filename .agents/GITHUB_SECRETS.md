@@ -118,13 +118,13 @@ gh auth status
 
 ```bash
 # Make sure .env files are configured
-cd /path/to/ai-project-template
+cd /path/to/autoGrow
 
 # Run the script
 ./.agents/scripts/set_github_secrets.sh
 
 # Output:
-# 🔐 Setting GitHub Secrets for repository: roeiba/ai-project-template
+# 🔐 Setting GitHub Secrets for repository: roeiba/autoGrow
 # 
 # 📦 Setting Gemini secrets...
 # ✅ Set GEMINI_API_KEY
@@ -140,9 +140,9 @@ cd /path/to/ai-project-template
 
 ```bash
 # Set individual secrets
-echo "your-api-key" | gh secret set GEMINI_API_KEY --repo roeiba/ai-project-template
-echo "your-project-id" | gh secret set GOOGLE_CLOUD_PROJECT --repo roeiba/ai-project-template
-echo "your-api-key" | gh secret set ANTHROPIC_API_KEY --repo roeiba/ai-project-template
+echo "your-api-key" | gh secret set GEMINI_API_KEY --repo roeiba/autoGrow
+echo "your-project-id" | gh secret set GOOGLE_CLOUD_PROJECT --repo roeiba/autoGrow
+echo "your-api-key" | gh secret set ANTHROPIC_API_KEY --repo roeiba/autoGrow
 ```
 
 ### Method 3: Via GitHub Web UI
@@ -158,7 +158,7 @@ echo "your-api-key" | gh secret set ANTHROPIC_API_KEY --repo roeiba/ai-project-t
 ### List All Secrets
 
 ```bash
-gh secret list --repo roeiba/ai-project-template
+gh secret list --repo roeiba/autoGrow
 ```
 
 Output:
@@ -195,14 +195,14 @@ vim src/claude-agent/.env
 
 ```bash
 # Update individual secret
-echo "new-api-key" | gh secret set GEMINI_API_KEY --repo roeiba/ai-project-template
+echo "new-api-key" | gh secret set GEMINI_API_KEY --repo roeiba/autoGrow
 ```
 
 ## 🗑️ Removing Secrets
 
 ```bash
 # Remove a secret
-gh secret remove GEMINI_API_KEY --repo roeiba/ai-project-template
+gh secret remove GEMINI_API_KEY --repo roeiba/autoGrow
 ```
 
 ## 🔒 Security Best Practices
@@ -275,10 +275,10 @@ steps:
 **Solution**:
 ```bash
 # Verify secret exists
-gh secret list --repo roeiba/ai-project-template
+gh secret list --repo roeiba/autoGrow
 
 # If missing, set it
-echo "your-key" | gh secret set SECRET_NAME --repo roeiba/ai-project-template
+echo "your-key" | gh secret set SECRET_NAME --repo roeiba/autoGrow
 ```
 
 ### Authentication Failed
@@ -335,5 +335,5 @@ Before running CI/CD workflows:
 ---
 
 **Last Updated**: November 13, 2025  
-**Repository**: roeiba/ai-project-template  
+**Repository**: roeiba/autoGrow  
 **Status**: ✅ All secrets configured

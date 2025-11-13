@@ -175,7 +175,7 @@ cd src/claude-agent/scripts
 ## 📁 Project Structure
 
 ```
-ai-project-template/
+autoGrow/
 ├── src/
 │   ├── gemini-agent/
 │   │   ├── gemini_agent.py           # Python wrapper

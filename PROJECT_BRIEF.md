@@ -7,10 +7,10 @@
 
 ## 🎯 Project Overview
 
-**Project Name**: AI-Optimized Project Template
+**Project Name**: AutoGrow
 
 **Brief Description**: 
-A comprehensive project template system that enables AI agents to generate complete, production-ready software projects from a single requirements document. The template provides structured guidelines, enterprise architecture patterns, and comprehensive documentation frameworks that AI assistants can follow to build professional applications.
+The world's first fully autonomous, self-growing software project. AutoGrow uses AI agents to continuously generate issues, write code, create pull requests, and monitor quality - all automatically. Fork it, set your keys, commit, and watch your project grow forever without human intervention.
 
 **Problem Statement**:
 Software project setup is time-consuming and error-prone, requiring developers to repeatedly create boilerplate code, documentation structures, CI/CD pipelines, and architectural decisions. AI coding assistants lack structured guidance to generate consistent, high-quality project foundations. Teams waste weeks setting up projects instead of building features.
@@ -103,7 +103,7 @@ Software development teams, AI coding assistants, project managers, startup foun
 ## 🔄 Key User Flows
 
 ### Flow 1: Initial Project Setup
-1. Human clones ai-project-template repository
+1. Human clones autoGrow repository
 2. Human fills out PROJECT_BRIEF.md with project requirements
 3. Human provides brief to AI agent with generation prompt
 4. AI agent reads PROJECT_BRIEF.md and .agents/project-rules.md

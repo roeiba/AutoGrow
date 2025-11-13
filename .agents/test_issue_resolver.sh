@@ -27,7 +27,7 @@ fi
 
 # Set default REPO_NAME if not set
 if [ -z "$REPO_NAME" ]; then
-    export REPO_NAME="roeiba/ai-project-template"
+    export REPO_NAME="roeiba/autoGrow"
     echo "ℹ️  Using default REPO_NAME: $REPO_NAME"
 fi
 

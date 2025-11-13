@@ -347,7 +347,7 @@ xdg-open tests/htmlcov/index.html  # Linux
 ```bash
 # 1. Clone repository
 git clone <repo-url>
-cd ai-project-template
+cd autoGrow
 
 # 2. Install dependencies
 make install

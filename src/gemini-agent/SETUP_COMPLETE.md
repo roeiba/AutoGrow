@@ -62,7 +62,7 @@ Visit [Google AI Studio](https://aistudio.google.com/apikey) and create an API k
 
 ### 2. Configure Environment (1 minute)
 ```bash
-cd /Users/roei/dev_workspace/spring-clients-projects/ai-project-template/src/gemini-agent
+cd /Users/roei/dev_workspace/spring-clients-projects/autoGrow/src/gemini-agent
 
 # Create .env file
 cp .env.example .env

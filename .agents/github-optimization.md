@@ -3,7 +3,7 @@
 ## 🎯 Repository Settings
 
 ### Basic Information
-- **Name**: `ai-project-template`
+- **Name**: `autoGrow`
 - **Description**: "Revolutionary template system where AI agents generate complete, production-ready projects from a single requirements document. Enterprise architecture, comprehensive documentation, and multi-stack support included."
 - **Website**: Link to documentation site (if created) or main README
 - **Topics/Tags**: 

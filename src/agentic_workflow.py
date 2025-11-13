@@ -16,6 +16,7 @@ import git
 
 from config import AgentConfig
 from utils.logger import setup_logger
+from utils.project_brief_validator import validate_project_brief
 from prompt_loader import PromptLoader
 
 
@@ -315,19 +316,59 @@ Closes #{issue['number']}
             self.logger.error(f"Error creating pull request: {e}")
             raise
     
+    def _validate_project_brief(self) -> bool:
+        """
+        Validate PROJECT_BRIEF.md before AI generation
+
+        Returns:
+            True if valid or not found (not required), False if invalid
+        """
+        project_brief_path = self.repo_path / "PROJECT_BRIEF.md"
+
+        # PROJECT_BRIEF.md is optional - only validate if it exists
+        if not project_brief_path.exists():
+            self.logger.info("No PROJECT_BRIEF.md found (optional)")
+            return True
+
+        self.logger.info("Validating PROJECT_BRIEF.md...")
+        result = validate_project_brief(project_brief_path)
+
+        if result.is_valid:
+            self.logger.info("✅ PROJECT_BRIEF.md validation passed")
+            if result.warnings:
+                self.logger.warning(f"Validation warnings ({len(result.warnings)}):")
+                for warning in result.warnings:
+                    self.logger.warning(f"  - {warning}")
+        else:
+            self.logger.error("❌ PROJECT_BRIEF.md validation failed")
+            for error in result.errors:
+                self.logger.error(f"  - {error}")
+
+            if result.warnings:
+                self.logger.warning("Additional warnings:")
+                for warning in result.warnings:
+                    self.logger.warning(f"  - {warning}")
+
+        return result.is_valid
+
     def run(self):
         """Execute the complete workflow"""
         self.logger.info("=" * 60)
         self.logger.info("Claude Agentic Workflow Starting")
         self.logger.info("=" * 60)
-        
+
         try:
             # Parse repository information
             owner, repo_name = self._parse_repo_info()
             self.logger.info(f"Target: {owner}/{repo_name}")
-            
+
             # Clone repository
             self._clone_repository(owner, repo_name)
+
+            # Validate PROJECT_BRIEF.md if it exists
+            if not self._validate_project_brief():
+                self.logger.error("\n⚠️  PROJECT_BRIEF.md validation failed. Fix errors before proceeding.")
+                return 1
             
             # Get issue details
             issue = self._get_issue(owner, repo_name)

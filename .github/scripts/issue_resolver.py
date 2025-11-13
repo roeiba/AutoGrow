@@ -41,7 +41,10 @@ MAX_TIME = int(os.getenv('MAX_EXECUTION_TIME', '8')) * 60
 start_time = time.time()
 
 print("🤖 Issue Resolver Agent Starting")
-print(f"📋 Config: labels_to_handle={LABELS_TO_HANDLE}, labels_to_skip={LABELS_TO_SKIP}")
+print(f"📋 Config:")
+print(f"   - Labels to handle: {LABELS_TO_HANDLE}")
+print(f"   - Labels to skip: {LABELS_TO_SKIP}")
+print(f"   - Supports: features, bugs, documentation, refactoring, tests, performance, security, CI/CD")
 
 # Initialize clients
 auth = Auth.Token(GITHUB_TOKEN)

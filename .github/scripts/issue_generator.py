@@ -68,11 +68,15 @@ Recent commits:
 Current open issues:
 {chr(10).join([f"- #{i.number}: {i.title}" for i in open_issues[:10]])}
 
-Generate {needed} realistic, actionable issue(s). Prioritize:
-1. Bug fixes (if you can identify potential bugs)
-2. Feature enhancements
-3. Documentation improvements
-4. Code quality improvements
+Generate {needed} realistic, actionable issue(s). Include diverse types:
+1. **feature**: New functionality or enhancements
+2. **bug**: Potential bugs or issues to fix
+3. **documentation**: Documentation improvements
+4. **refactor**: Code quality and refactoring
+5. **test**: Testing improvements
+6. **performance**: Performance optimizations
+7. **security**: Security improvements
+8. **ci/cd**: CI/CD pipeline improvements
 
 Respond with ONLY a JSON object in this exact format:
 {{
@@ -80,10 +84,12 @@ Respond with ONLY a JSON object in this exact format:
     {{
       "title": "Brief title (max 80 chars)",
       "body": "Description (max 300 chars)",
-      "labels": ["bug"]
+      "labels": ["feature"]
     }}
   ]
 }}
+
+Use appropriate labels: feature, bug, documentation, refactor, test, performance, security, ci/cd
 
 Keep descriptions brief and output ONLY the JSON, nothing else."""
 

@@ -120,7 +120,6 @@ class IssueResolver:
                 "Please fix PROJECT_BRIEF.md validation errors before I can proceed.\n\n"
                 "---\n*Issue Resolver Agent*"
             )
-            selected_issue.remove_from_labels("in-progress")
             return False
 
         # Add validation success to issue comment if there was a validation
@@ -138,7 +137,6 @@ class IssueResolver:
         if summary is None:
             if issue_claimed:
                 selected_issue.create_comment("❌ Failed to generate fix")
-                selected_issue.remove_from_labels("in-progress")
             return False
 
         # Check if files were modified and create PR
@@ -344,7 +342,6 @@ I'm working on this issue now.
             print(f"   ❌ Failed to create branch: {e}")
             if issue_claimed:
                 issue.create_comment(f"❌ Failed to create branch: {e}")
-                issue.remove_from_labels("in-progress")
             return False
 
     def _generate_fix(
@@ -453,7 +450,6 @@ You have access to Read and Write tools to modify files in the current directory
             issue.create_comment(
                 "⚠️ No changes were made. The issue may need manual review."
             )
-            issue.remove_from_labels("in-progress")
             return False
 
         # Get list of changed files
@@ -527,13 +523,8 @@ Pull Request: #{pr.number}
 *Completed at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*"""
             )
 
-        @retry_github_api
-        def remove_label():
-            return issue.remove_from_labels("in-progress")
-
         update_issue()
-        remove_label()
-        print("   ✅ Issue updated and 'in-progress' label removed")
+        print("   ✅ Issue updated")
 
         print("\n" + "="*80)
         print("🎉 WORKFLOW COMPLETED SUCCESSFULLY")

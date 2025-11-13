@@ -48,20 +48,29 @@ Think of it as **hiring an AI development team that never sleeps.**
 │  Every 10 Minutes (Automated GitHub Actions)                │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  1. Issue Generator Agent                                   │
+│  1. Issue Generator Agent (.github/workflows)               │
 │     ├─ Analyzes current project state                       │
 │     ├─ Generates 3 new improvement issues                   │
-│     └─ Labels them (feature/bug/docs/etc)                   │
+│     ├─ Creates GitHub issues with labels                    │
+│     └─ Labels: feature/bug/docs/refactor/test               │
 │                                                              │
-│  2. Issue Resolver Agent                                    │
-│     ├─ Picks an open issue                                  │
-│     ├─ Reads relevant code with Claude AI                   │
+│  2. Issue Resolver Agent (.github/workflows)                │
+│     ├─ Picks an open GitHub issue                           │
+│     ├─ Reads relevant code with AI (Claude/Gemini)          │
 │     ├─ Writes production-ready solution                     │
 │     ├─ Creates tests and documentation                      │
 │     ├─ Commits to new branch                                │
-│     └─ Opens pull request                                   │
+│     ├─ Opens pull request with issue reference              │
+│     └─ Runs CI/CD validation                                │
 │                                                              │
-│  3. You (Optional)                                          │
+│  3. GitHub as Central System                                │
+│     ├─ Issues = Memory & Task Queue                         │
+│     ├─ PRs = Code Review & Integration                      │
+│     ├─ Labels = Task Classification                         │
+│     ├─ Actions = Execution & Automation                     │
+│     └─ CI/CD = Quality Validation                           │
+│                                                              │
+│  4. You (Optional)                                          │
 │     ├─ Review the PR                                        │
 │     ├─ Merge if good                                        │
 │     └─ Or let it accumulate for batch review                │
@@ -69,6 +78,7 @@ Think of it as **hiring an AI development team that never sleeps.**
 └─────────────────────────────────────────────────────────────┘
 
 Result: Your project writes itself, continuously, forever.
+       GitHub serves as the brain, memory, and executor.
 ```
 
 ## 📁 What You Get
@@ -77,12 +87,19 @@ Result: Your project writes itself, continuously, forever.
 autoGrow/
 │
 ├── PROJECT_BRIEF.md              ⭐ Fill this with your requirements
-├── .agents/                      🤖 AI guidelines (for AI agents)
+├── .agents/                      🤖 AI guidelines & maintenance docs
+├── .github/                      🔄 GitHub workflows & CI/CD
+│   ├── workflows/                   Issue generation & resolution
+│   └── scripts/                     Agent implementations
 ├── src/                          💻 Your applications (AI generates)
+│   ├── agents/                      Core agent logic
+│   ├── claude-agent/                Claude-based automation
+│   └── gemini-agent/                Gemini-based automation
 ├── project-docs/                 📚 Documentation (AI generates)
-├── tasks/                        ✅ Task tracking
-├── deployment/                   🚀 Infrastructure configs
-└── scripts/                      🛠️ Automation scripts
+├── tests/                        ✅ Unit & integration tests
+├── docs/                         📖 User guides & references
+├── scripts/                      🛠️ Automation & utility scripts
+└── examples/                     💡 Demo applications
 ```
 
 
@@ -149,9 +166,10 @@ Within 10 minutes, your project will:
 4. ✅ Continue growing forever
 
 Check:
-- **Issues tab** - New issues appear every 10 minutes
+- **Issues tab** - New issues appear every 10 minutes (your task queue)
 - **Pull Requests tab** - AI-generated code ready for review
 - **Actions tab** - Watch the agents work in real-time
+- **Labels** - See task categorization (feature/bug/docs/refactor/test)
 
 📚 **[Full Documentation →](docs/README.md)**
 
@@ -182,10 +200,11 @@ You describe vision → AI generates issues → AI writes code → AI creates PR
 ## ✨ Key Features
 
 ### 🤖 Autonomous Agents
-- **Issue Generator** - Creates improvement tasks every 10 minutes
+- **Issue Generator** - Creates GitHub issues every 10 minutes
 - **Issue Resolver** - Writes production code automatically
-- **Smart Validation** - Ensures quality before committing
-- **PR Creation** - Submits code for your review
+- **GitHub Integration** - Uses issues as memory, PRs as execution
+- **Smart Validation** - CI/CD ensures quality before merging
+- **Label Management** - Auto-categorizes tasks (feature/bug/docs/etc)
 
 ### 🏗️ Enterprise-Grade
 - **Clean Architecture** - Modular, scalable, maintainable
@@ -211,27 +230,48 @@ The template is **technology-agnostic**. AI can generate projects using:
 
 Just specify your preferences in `PROJECT_BRIEF.md`.
 
-## 🤖 AI Agents
+## 🤖 AI Agents & GitHub Integration
 
-This template includes ready-to-use AI agents for automation:
+This template uses **GitHub as the central nervous system**:
 
-### Claude Agent
+### GitHub-Centric Architecture
+- **Issues** = Task memory and queue
+- **Pull Requests** = Code execution and review
+- **Labels** = Task classification and prioritization
+- **Actions** = Automated workflows and CI/CD
+- **Branches** = Isolated development environments
+
+### Agent Implementations
+
+#### Issue Generator Agent
+- **Location**: `.github/workflows/issue-generator.yml` + `.github/scripts/issue_generator.py`
+- **Purpose**: Analyzes project and creates GitHub issues
+- **Triggers**: Every 10 minutes via GitHub Actions
+- **Output**: 3 labeled issues per run
+
+#### Issue Resolver Agent
+- **Location**: `.github/workflows/issue-resolver.yml` + `.github/scripts/issue_resolver.py`
+- **Purpose**: Solves GitHub issues and creates PRs
+- **Triggers**: Every 10 minutes via GitHub Actions
+- **Features**: AI-powered code generation, automated testing, PR creation
+
+#### Claude Agent
 - **Location**: `src/claude-agent/`
 - **Purpose**: Complex code generation and issue resolution
 - **Features**: GitHub integration, automated PR creation, multi-role workflow
 
-### Gemini Agent (NEW!)
+#### Gemini Agent
 - **Location**: `src/gemini-agent/`
 - **Purpose**: Headless automation, code review, documentation generation
 - **Features**: CLI-based, scriptable, batch processing, Python integration
 - **Quick Start**: See [src/gemini-agent/QUICKSTART.md](src/gemini-agent/QUICKSTART.md)
 
 **Use Cases:**
-- Automated code reviews
+- Automated issue generation and resolution
+- Code reviews via PR comments
 - Documentation generation
-- Log analysis
+- CI/CD integration and validation
 - Batch file processing
-- CI/CD integration
 
 ## 📚 Documentation
 

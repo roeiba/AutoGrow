@@ -6,9 +6,11 @@ Ensures minimum number of open issues by generating new ones with Claude AI usin
 """
 
 import json
+import os
 import sys
+from collections import Counter
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set, Tuple
 
 # Add src directory to path to import modules
 sys.path.insert(0, str(Path(__file__).parent.parent / 'claude-agent'))
@@ -76,39 +78,282 @@ class IssueGenerator:
     def _generate_issues(self, needed: int, open_issues: List) -> None:
         """
         Generate issues using Claude AI
-        
+
         Args:
             needed: Number of issues to generate
             open_issues: List of current open issues
         """
         # Get repository context
         print("📖 Analyzing repository for potential issues...")
-        
+
         try:
             readme = self.repo.get_readme().decoded_content.decode('utf-8')[:1000]
         except:
             readme = "No README found"
-        
+
         recent_commits = list(self.repo.get_commits()[:5])
         commit_messages = "\n".join([f"- {c.commit.message.split(chr(10))[0]}" for c in recent_commits])
-        
+
+        # Analyze project structure
+        print("🔍 Analyzing project structure...")
+        project_context = self._analyze_project_structure()
+
         # Build prompt for Claude
-        prompt = self._build_prompt(needed, readme, commit_messages, open_issues)
-        
+        prompt = self._build_prompt(needed, readme, commit_messages, open_issues, project_context)
+
         print(f"📝 Prompt length: {len(prompt)} chars")
-        
+
         # Call Claude AI
         response_text = self._call_claude(prompt)
-        
+
         if not response_text:
             print("❌ Failed to get response from Claude")
             sys.exit(1)
-        
+
         # Parse and create issues
         self._parse_and_create_issues(response_text, needed)
-    
-    def _build_prompt(self, needed: int, readme: str, commit_messages: str, open_issues: List) -> str:
-        """Build the prompt for Claude"""
+
+    def _analyze_project_structure(self) -> Dict:
+        """
+        Analyze the full project structure including directories, file types, and code patterns
+
+        Returns:
+            Dict containing project structure analysis
+        """
+        try:
+            # Get directory structure
+            dir_structure = self._get_directory_structure()
+
+            # Get file types distribution
+            file_types = self._get_file_types_distribution()
+
+            # Detect code patterns and frameworks
+            code_patterns = self._detect_code_patterns()
+
+            # Get key configuration files
+            config_files = self._get_config_files()
+
+            return {
+                'directory_structure': dir_structure,
+                'file_types': file_types,
+                'code_patterns': code_patterns,
+                'config_files': config_files
+            }
+        except Exception as e:
+            print(f"⚠️  Error analyzing project structure: {e}")
+            return {
+                'directory_structure': {},
+                'file_types': {},
+                'code_patterns': [],
+                'config_files': []
+            }
+
+    def _get_directory_structure(self) -> Dict:
+        """Get the main directory structure of the repository"""
+        try:
+            contents = self.repo.get_contents("")
+            structure = {}
+
+            # Track main directories
+            directories = []
+            key_files = []
+
+            for content in contents:
+                if content.type == "dir":
+                    directories.append(content.name)
+                    # Get first level subdirectories for important dirs
+                    if content.name in ['src', 'lib', 'app', 'tests', 'docs', 'scripts', '.github']:
+                        try:
+                            subcontents = self.repo.get_contents(content.path)
+                            subdirs = [c.name for c in subcontents if c.type == "dir"]
+                            structure[content.name] = subdirs[:10]  # Limit to 10 subdirs
+                        except:
+                            structure[content.name] = []
+                else:
+                    key_files.append(content.name)
+
+            structure['_root_dirs'] = directories
+            structure['_root_files'] = key_files
+
+            return structure
+        except Exception as e:
+            print(f"⚠️  Error getting directory structure: {e}")
+            return {}
+
+    def _get_file_types_distribution(self) -> Dict:
+        """Analyze distribution of file types in the repository"""
+        try:
+            # Get all files from git tree (more efficient than recursive API calls)
+            tree = self.repo.get_git_tree(self.repo.default_branch, recursive=True)
+
+            file_extensions = []
+            for item in tree.tree[:1000]:  # Limit to first 1000 files
+                if item.type == "blob":
+                    path = Path(item.path)
+                    if path.suffix:
+                        file_extensions.append(path.suffix.lower())
+
+            # Count file types
+            extension_counts = Counter(file_extensions)
+
+            # Return top 15 file types
+            return dict(extension_counts.most_common(15))
+        except Exception as e:
+            print(f"⚠️  Error getting file types: {e}")
+            return {}
+
+    def _detect_code_patterns(self) -> List[str]:
+        """Detect programming languages, frameworks, and patterns used in the project"""
+        patterns = []
+
+        try:
+            # Check for language-specific files
+            language_indicators = {
+                'Python': ['requirements.txt', 'setup.py', 'pyproject.toml', 'Pipfile'],
+                'JavaScript/Node.js': ['package.json', 'yarn.lock', 'npm-shrinkwrap.json'],
+                'TypeScript': ['tsconfig.json'],
+                'Go': ['go.mod', 'go.sum'],
+                'Rust': ['Cargo.toml', 'Cargo.lock'],
+                'Java': ['pom.xml', 'build.gradle', 'build.gradle.kts'],
+                'Ruby': ['Gemfile', 'Gemfile.lock'],
+                'PHP': ['composer.json', 'composer.lock'],
+                'C#/.NET': ['.csproj', '.sln'],
+                'Docker': ['Dockerfile', 'docker-compose.yml'],
+                'Kubernetes': ['deployment.yaml', 'service.yaml'],
+                'Terraform': ['.tf'],
+                'CI/CD': ['.github/workflows', '.gitlab-ci.yml', 'Jenkinsfile'],
+                'Testing': ['pytest.ini', 'jest.config.js', 'phpunit.xml'],
+                'Documentation': ['docs/', 'README.md', 'CONTRIBUTING.md']
+            }
+
+            contents = self.repo.get_contents("")
+            file_names = [c.name for c in contents]
+
+            # Check root directory for indicators
+            for pattern_name, indicators in language_indicators.items():
+                for indicator in indicators:
+                    if indicator in file_names or any(indicator in f for f in file_names):
+                        patterns.append(pattern_name)
+                        break
+
+            # Check for workflows directory
+            try:
+                workflows = self.repo.get_contents(".github/workflows")
+                if workflows:
+                    patterns.append('GitHub Actions')
+            except:
+                pass
+
+            # Check for common frameworks in package.json
+            try:
+                package_json = self.repo.get_contents("package.json")
+                package_data = json.loads(package_json.decoded_content.decode('utf-8'))
+                dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+                framework_indicators = {
+                    'React': 'react',
+                    'Vue': 'vue',
+                    'Angular': '@angular/core',
+                    'Express': 'express',
+                    'Next.js': 'next',
+                    'NestJS': '@nestjs/core',
+                    'Jest': 'jest',
+                    'Webpack': 'webpack'
+                }
+
+                for framework, package in framework_indicators.items():
+                    if package in dependencies:
+                        patterns.append(framework)
+            except:
+                pass
+
+            # Check for Python frameworks in requirements.txt
+            try:
+                requirements = self.repo.get_contents("requirements.txt")
+                req_content = requirements.decoded_content.decode('utf-8').lower()
+
+                framework_indicators = {
+                    'Django': 'django',
+                    'Flask': 'flask',
+                    'FastAPI': 'fastapi',
+                    'Pytest': 'pytest',
+                    'NumPy': 'numpy',
+                    'Pandas': 'pandas',
+                    'TensorFlow': 'tensorflow',
+                    'PyTorch': 'torch'
+                }
+
+                for framework, package in framework_indicators.items():
+                    if package in req_content:
+                        patterns.append(framework)
+            except:
+                pass
+
+        except Exception as e:
+            print(f"⚠️  Error detecting code patterns: {e}")
+
+        return list(set(patterns))  # Remove duplicates
+
+    def _get_config_files(self) -> List[str]:
+        """Get list of important configuration files present in the repository"""
+        config_files = []
+
+        important_configs = [
+            '.gitignore', '.dockerignore', 'Makefile',
+            'README.md', 'LICENSE', 'CONTRIBUTING.md',
+            'CODE_OF_CONDUCT.md', 'SECURITY.md',
+            '.env.example', 'config.yaml', 'config.json'
+        ]
+
+        try:
+            contents = self.repo.get_contents("")
+            file_names = [c.name for c in contents]
+
+            for config in important_configs:
+                if config in file_names:
+                    config_files.append(config)
+        except Exception as e:
+            print(f"⚠️  Error getting config files: {e}")
+
+        return config_files
+
+    def _build_prompt(self, needed: int, readme: str, commit_messages: str, open_issues: List, project_context: Dict = None) -> str:
+        """Build the prompt for Claude with enhanced project context"""
+
+        # Format project context if available
+        context_section = ""
+        if project_context:
+            # Directory structure
+            if project_context.get('directory_structure'):
+                dir_info = project_context['directory_structure']
+                root_dirs = dir_info.get('_root_dirs', [])
+                context_section += f"\nProject Structure:\n"
+                context_section += f"Root directories: {', '.join(root_dirs[:15])}\n"
+
+                # Show subdirectories for key folders
+                for key in ['src', 'tests', 'docs', 'scripts', '.github']:
+                    if key in dir_info and dir_info[key]:
+                        context_section += f"  {key}/: {', '.join(dir_info[key])}\n"
+
+            # File types distribution
+            if project_context.get('file_types'):
+                file_types = project_context['file_types']
+                context_section += f"\nFile Types Distribution:\n"
+                for ext, count in list(file_types.items())[:10]:
+                    context_section += f"  {ext}: {count} files\n"
+
+            # Code patterns and frameworks
+            if project_context.get('code_patterns'):
+                patterns = project_context['code_patterns']
+                context_section += f"\nDetected Technologies & Frameworks:\n"
+                context_section += f"  {', '.join(patterns)}\n"
+
+            # Configuration files
+            if project_context.get('config_files'):
+                config_files = project_context['config_files']
+                context_section += f"\nKey Configuration Files:\n"
+                context_section += f"  {', '.join(config_files)}\n"
+
         return f"""Analyze this GitHub repository and suggest {needed} new issue(s).
 
 Repository: {self.repo.full_name}
@@ -118,12 +363,24 @@ README excerpt:
 
 Recent commits:
 {commit_messages}
-
+{context_section}
 Current open issues:
 {chr(10).join([f"- #{i.number}: {i.title}" for i in open_issues[:10]])}
 
-Generate {needed} realistic, actionable issue(s). 
-Read the whole project and find the most important thing for it - from new features, UI, apps, marketing or sales tools to bug fixes, tests, devops etc. 
+Based on the full project analysis above (directory structure, file types, technologies used, and configuration),
+generate {needed} realistic, actionable issue(s) that are contextually appropriate for this project.
+
+Consider:
+- The project's tech stack and frameworks
+- Missing tests for existing code
+- Documentation gaps
+- CI/CD improvements
+- Code quality and refactoring opportunities
+- Missing configuration or setup files
+- Security best practices
+- Performance optimizations
+- Developer experience improvements
+- Feature enhancements aligned with the project's purpose
 
 Respond with ONLY a JSON object in this exact format:
 {{
@@ -136,7 +393,7 @@ Respond with ONLY a JSON object in this exact format:
   ]
 }}
 
-Use appropriate labels: feature, bug, documentation, refactor, test, performance, security, ci/cd
+Use appropriate labels: feature, bug, documentation, refactor, test, performance, security, ci/cd, enhancement
 
 Keep descriptions brief and output ONLY the JSON, nothing else."""
     

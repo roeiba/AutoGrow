@@ -5,6 +5,7 @@ LLM-based role workflow for GitHub issue resolution using Claude AI
 """
 
 import sys
+import os
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -318,7 +319,10 @@ Closes #{issue['number']}
     
     def _validate_project_brief(self) -> bool:
         """
-        Validate PROJECT_BRIEF.md before AI generation
+        Validate PROJECT_BRIEF.md before AI generation starts
+
+        This validation ensures all required sections are present, preventing
+        incomplete briefs and improving AI generation quality.
 
         Returns:
             True if valid or not found (not required), False if invalid
@@ -330,17 +334,19 @@ Closes #{issue['number']}
             self.logger.info("No PROJECT_BRIEF.md found (optional)")
             return True
 
-        self.logger.info("Validating PROJECT_BRIEF.md...")
+        self.logger.info("Validating PROJECT_BRIEF.md format and required sections...")
+        self.logger.info("This prevents incomplete briefs and ensures quality AI generation.")
         result = validate_project_brief(project_brief_path)
 
         if result.is_valid:
-            self.logger.info("✅ PROJECT_BRIEF.md validation passed")
+            self.logger.info("✅ PROJECT_BRIEF.md validation passed - All required sections present")
             if result.warnings:
                 self.logger.warning(f"Validation warnings ({len(result.warnings)}):")
                 for warning in result.warnings:
                     self.logger.warning(f"  - {warning}")
         else:
-            self.logger.error("❌ PROJECT_BRIEF.md validation failed")
+            self.logger.error("❌ PROJECT_BRIEF.md validation failed - Incomplete brief detected")
+            self.logger.error("Required sections: Overview, Core Features, Technical Requirements, Success Criteria")
             for error in result.errors:
                 self.logger.error(f"  - {error}")
 
@@ -366,8 +372,11 @@ Closes #{issue['number']}
             self._clone_repository(owner, repo_name)
 
             # Validate PROJECT_BRIEF.md if it exists
+            # This prevents incomplete briefs and ensures quality AI generation
             if not self._validate_project_brief():
-                self.logger.error("\n⚠️  PROJECT_BRIEF.md validation failed. Fix errors before proceeding.")
+                self.logger.error("\n⚠️  PROJECT_BRIEF.md validation failed!")
+                self.logger.error("⚠️  Please ensure all required sections are complete before AI generation.")
+                self.logger.error("⚠️  This validation improves generation quality and prevents wasted API calls.")
                 return 1
             
             # Get issue details

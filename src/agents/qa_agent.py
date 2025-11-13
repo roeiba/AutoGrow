@@ -19,6 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Import model configuration
 from models_config import CLAUDE_MODELS, SystemPrompts
 
+# Import retry handler
+from utils.retry_handler import retry_anthropic_api, retry_github_api
+
 # Import Claude CLI Agent or fallback to Anthropic SDK
 try:
     from claude_cli_agent import ClaudeAgent
@@ -96,20 +99,12 @@ class QAAgent:
 
         context = {"issues": [], "pull_requests": [], "commits": [], "repo_info": {}}
 
-        # Get repository info
-        context["repo_info"] = {
-            "name": self.repo.name,
-            "description": self.repo.description,
-            "open_issues_count": self.repo.open_issues_count,
-            "stargazers_count": self.repo.stargazers_count,
-            "language": self.repo.language,
-        }
+        # Get repository info with retry logic
+        context["repo_info"] = self._get_repo_info_with_retry()
 
-        # Get recent issues
+        # Get recent issues with retry logic
         print(f"📋 Reviewing {self.max_issues} recent issues...")
-        issues = list(
-            self.repo.get_issues(state="all", sort="updated", direction="desc")
-        )[: self.max_issues]
+        issues = self._get_issues_with_retry()
         for issue in issues:
             if issue.pull_request:
                 continue
@@ -125,11 +120,9 @@ class QAAgent:
                 }
             )
 
-        # Get recent pull requests
+        # Get recent pull requests with retry logic
         print(f"🔀 Reviewing {self.max_prs} recent pull requests...")
-        prs = list(self.repo.get_pulls(state="all", sort="updated", direction="desc"))[
-            : self.max_prs
-        ]
+        prs = self._get_pull_requests_with_retry()
         for pr in prs:
             context["pull_requests"].append(
                 {
@@ -145,9 +138,9 @@ class QAAgent:
                 }
             )
 
-        # Get recent commits
+        # Get recent commits with retry logic
         print(f"📝 Reviewing {self.max_commits} recent commits...")
-        commits = list(self.repo.get_commits())[: self.max_commits]
+        commits = self._get_commits_with_retry()
         for commit in commits:
             context["commits"].append(
                 {
@@ -163,6 +156,36 @@ class QAAgent:
             f"✅ Gathered context: {len(context['issues'])} issues, {len(context['pull_requests'])} PRs, {len(context['commits'])} commits"
         )
         return context
+
+    @retry_github_api
+    def _get_repo_info_with_retry(self) -> Dict:
+        """Get repository info with retry logic"""
+        return {
+            "name": self.repo.name,
+            "description": self.repo.description,
+            "open_issues_count": self.repo.open_issues_count,
+            "stargazers_count": self.repo.stargazers_count,
+            "language": self.repo.language,
+        }
+
+    @retry_github_api
+    def _get_issues_with_retry(self) -> List:
+        """Get issues with retry logic"""
+        return list(
+            self.repo.get_issues(state="all", sort="updated", direction="desc")
+        )[: self.max_issues]
+
+    @retry_github_api
+    def _get_pull_requests_with_retry(self) -> List:
+        """Get pull requests with retry logic"""
+        return list(
+            self.repo.get_pulls(state="all", sort="updated", direction="desc")
+        )[: self.max_prs]
+
+    @retry_github_api
+    def _get_commits_with_retry(self) -> List:
+        """Get commits with retry logic"""
+        return list(self.repo.get_commits())[: self.max_commits]
 
     def _build_qa_prompt(self, context: Dict) -> str:
         """Build the QA analysis prompt"""
@@ -263,14 +286,7 @@ Output ONLY the JSON, nothing else.
                     response_text = str(result)
             else:
                 print("🤖 Using Anthropic API...")
-                client = Anthropic(api_key=self.anthropic_api_key)
-                message = client.messages.create(
-                    model=CLAUDE_MODELS.QA_ANALYSIS,
-                    max_tokens=CLAUDE_MODELS.QA_MAX_TOKENS,
-                    system=SystemPrompts.QA_ENGINEER,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                response_text = message.content[0].text
+                response_text = self._call_anthropic_api_with_retry(prompt)
 
             print(f"✅ Received response ({len(response_text)} chars)")
             return response_text
@@ -281,6 +297,18 @@ Output ONLY the JSON, nothing else.
 
             traceback.print_exc()
             return None
+
+    @retry_anthropic_api
+    def _call_anthropic_api_with_retry(self, prompt: str) -> str:
+        """Call Anthropic API with retry logic"""
+        client = Anthropic(api_key=self.anthropic_api_key)
+        message = client.messages.create(
+            model=CLAUDE_MODELS.QA_ANALYSIS,
+            max_tokens=CLAUDE_MODELS.QA_MAX_TOKENS,
+            system=SystemPrompts.QA_ENGINEER,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
 
     def _parse_and_act_on_results(self, response_text: str) -> bool:
         """Parse QA results and create issues if needed"""
@@ -423,14 +451,17 @@ Output ONLY the JSON, nothing else.
             if cat in ["security", "code_quality", "process", "health"]:
                 labels.append(cat)
 
-        # Create the issue
+        # Create the issue with retry logic
         try:
             issue_title = f"QA Report: {summary[:60]}"
-            new_issue = self.repo.create_issue(
-                title=issue_title, body=body, labels=labels
-            )
+            new_issue = self._create_issue_with_retry(issue_title, body, labels)
             print(f"✅ Created QA issue #{new_issue.number}: {issue_title}")
             return new_issue
         except Exception as e:
             print(f"❌ Failed to create issue: {e}")
             return None
+
+    @retry_github_api
+    def _create_issue_with_retry(self, title: str, body: str, labels: List[str]):
+        """Create GitHub issue with retry logic"""
+        return self.repo.create_issue(title=title, body=body, labels=labels)

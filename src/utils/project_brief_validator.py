@@ -79,10 +79,10 @@ class ProjectBriefValidator:
         "Target Users",
     ]
 
-    # Minimum content length thresholds (characters)
-    MIN_DESCRIPTION_LENGTH = 50
-    MIN_PROBLEM_STATEMENT_LENGTH = 100
-    MIN_REQUIREMENTS_LENGTH = 100
+    # Minimum content length thresholds (characters) - lenient for AI consumption
+    MIN_DESCRIPTION_LENGTH = 20
+    MIN_PROBLEM_STATEMENT_LENGTH = 30
+    MIN_REQUIREMENTS_LENGTH = 30
 
     def __init__(self, project_brief_path: Optional[Path] = None):
         """
@@ -152,11 +152,11 @@ class ProjectBriefValidator:
 
         result.metadata["sections_found"] = headers
 
-        # Check required sections
+        # Check required sections - use flexible matching for AI-friendly free text
         for required_section in self.REQUIRED_SECTIONS:
-            # Use emoji-agnostic matching
+            # Match section name anywhere in a heading, ignoring emojis and extra text
             pattern = re.compile(
-                r"##\s+[🎯📋🏗️👥🔄]?\s*" + re.escape(required_section), re.IGNORECASE
+                r"##\s+.*" + re.escape(required_section), re.IGNORECASE
             )
             if not pattern.search(content):
                 result.add_error(f"Missing required section: '{required_section}'")
@@ -164,7 +164,7 @@ class ProjectBriefValidator:
         # Check recommended sections
         for recommended_section in self.RECOMMENDED_SECTIONS:
             pattern = re.compile(
-                r"##\s+[🗄️🔌📅💰]?\s*" + re.escape(recommended_section), re.IGNORECASE
+                r"##\s+.*" + re.escape(recommended_section), re.IGNORECASE
             )
             if not pattern.search(content):
                 result.add_warning(
@@ -310,10 +310,7 @@ class ProjectBriefValidator:
                 "Consider breaking them up for readability."
             )
 
-        # Check for empty sections
-        empty_sections = re.findall(r"##\s+(.+)\s*\n\s*\n##", content)
-        if empty_sections:
-            result.add_error(f"Found empty sections: {', '.join(empty_sections[:3])}")
+        # Skip empty section check - AI can handle free-form text and various formats
 
         # Check completion checklist if exists
         if (

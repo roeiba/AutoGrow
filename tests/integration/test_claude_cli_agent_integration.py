@@ -114,7 +114,11 @@ class TestClaudeAgentIntegrationBasic:
     @pytest.mark.slow
     def test_real_query_text_format(self):
         """Test query with text output format"""
-        text_agent = ClaudeAgent(output_format="text")
+        try:
+            text_agent = ClaudeAgent(output_format="text")
+        except RuntimeError as e:
+            pytest.skip(f"Claude CLI not available: {e}")
+        
         result = text_agent.query("Say 'text format works'")
 
         assert result is not None
@@ -292,7 +296,10 @@ class TestClaudeAgentIntegrationToolControl:
     @pytest.mark.slow
     def test_real_with_allowed_tools(self):
         """Test with allowed tools restriction"""
-        agent = ClaudeAgent(output_format="json", allowed_tools=["Read"])
+        try:
+            agent = ClaudeAgent(output_format="json", allowed_tools=["Read"])
+        except RuntimeError as e:
+            pytest.skip(f"Claude CLI not available: {e}")
 
         result = agent.query("What can you help me with?")
 
@@ -303,7 +310,10 @@ class TestClaudeAgentIntegrationToolControl:
     @pytest.mark.slow
     def test_real_with_disallowed_tools(self):
         """Test with disallowed tools"""
-        agent = ClaudeAgent(output_format="json", disallowed_tools=["Bash"])
+        try:
+            agent = ClaudeAgent(output_format="json", disallowed_tools=["Bash"])
+        except RuntimeError as e:
+            pytest.skip(f"Claude CLI not available: {e}")
 
         result = agent.query("Say 'tool control works'")
 

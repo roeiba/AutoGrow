@@ -80,14 +80,23 @@ class IssueResolver:
         Returns:
             bool: True if issue was resolved, False otherwise
         """
+        print("\n" + "="*80)
+        print("🚀 STARTING ISSUE RESOLUTION WORKFLOW")
+        print("="*80)
+        
         # Select issue
         selected_issue = self._select_issue(specific_issue)
 
         if not selected_issue:
-            print("ℹ️  No suitable issues found")
+            print("\n❌ WORKFLOW ABORTED: No suitable issues found")
+            print("="*80 + "\n")
             return False
 
-        print(f"✅ Selected issue #{selected_issue.number}: {selected_issue.title}")
+        print(f"\n✅ ISSUE SELECTED")
+        print(f"   Issue: #{selected_issue.number}")
+        print(f"   Title: {selected_issue.title}")
+        print(f"   Labels: {[label.name for label in selected_issue.labels]}")
+        print(f"   Created: {selected_issue.created_at}")
 
         # Claim the issue
         issue_claimed = self._claim_issue(selected_issue)
@@ -136,26 +145,47 @@ class IssueResolver:
 
     def _select_issue(self, specific_issue: Optional[int]) -> Optional[object]:
         """Select an issue to work on"""
+        print("\n" + "-"*80)
+        print("📋 STEP 1: ISSUE SELECTION")
+        print("-"*80)
+        
         if specific_issue:
-            print(f"🎯 Working on specific issue #{specific_issue}")
-            return self.repo.get_issue(int(specific_issue))
+            print(f"🎯 Mode: Specific issue requested")
+            print(f"   Issue number: #{specific_issue}")
+            issue = self.repo.get_issue(int(specific_issue))
+            print(f"   ✅ Found issue: {issue.title}")
+            return issue
 
-        print("🔍 Searching for issue to resolve...")
+        print(f"🔍 Mode: Searching for suitable issue")
+        print(f"   Criteria:")
+        print(f"   - State: open")
+        print(f"   - Must have labels: {self.labels_to_handle}")
+        print(f"   - Must NOT have labels: {self.labels_to_skip}")
+        print(f"   - Not already claimed by agent")
+        
         open_issues = self.repo.get_issues(
             state="open", sort="created", direction="asc"
         )
 
+        issues_checked = 0
         for issue in open_issues:
+            issues_checked += 1
+            
             if issue.pull_request:
+                print(f"   ⏭️  Skipping #{issue.number}: Is a pull request")
                 continue
 
             issue_labels = [label.name for label in issue.labels]
+            
             if any(skip_label in issue_labels for skip_label in self.labels_to_skip):
+                skip_label_found = [l for l in issue_labels if l in self.labels_to_skip]
+                print(f"   ⏭️  Skipping #{issue.number}: Has skip label {skip_label_found}")
                 continue
 
             if self.labels_to_handle and not any(
                 handle_label in issue_labels for handle_label in self.labels_to_handle
             ):
+                print(f"   ⏭️  Skipping #{issue.number}: No matching labels (has: {issue_labels})")
                 continue
 
             comments = list(issue.get_comments())
@@ -163,14 +193,25 @@ class IssueResolver:
                 "Issue Resolver Agent" in c.body and "claimed" in c.body.lower()
                 for c in comments
             ):
+                print(f"   ⏭️  Skipping #{issue.number}: Already claimed by agent")
                 continue
 
+            print(f"\n   ✅ SELECTED: Issue #{issue.number}")
+            print(f"      Title: {issue.title}")
+            print(f"      Labels: {issue_labels}")
+            print(f"      Reason: Matches all criteria")
+            print(f"      (Checked {issues_checked} issues total)")
             return issue
 
+        print(f"\n   ❌ No suitable issues found (checked {issues_checked} issues)")
         return None
 
     def _claim_issue(self, issue) -> bool:
         """Claim an issue by adding a comment and label"""
+        print("\n" + "-"*80)
+        print("📋 STEP 2: CLAIMING ISSUE")
+        print("-"*80)
+        
         claim_message = f"""🤖 **Issue Resolver Agent**
 
 I'm working on this issue now.
@@ -183,7 +224,8 @@ I'm working on this issue now.
 
         issue.create_comment(claim_message)
         issue.add_to_labels("in-progress")
-        print("📝 Claimed issue")
+        print("   ✅ Added 'in-progress' label")
+        print("   ✅ Posted claim comment to issue")
         return True
 
     def _should_skip_validation(
@@ -219,40 +261,44 @@ I'm working on this issue now.
         issue_labels: Optional[List[str]] = None,
     ) -> Tuple[bool, Optional[str]]:
         """Validate PROJECT_BRIEF.md if it exists"""
+        print("\n" + "-"*80)
+        print("📋 STEP 3: PROJECT BRIEF VALIDATION")
+        print("-"*80)
+        
         issue_labels = issue_labels or []
 
         if self._should_skip_validation(issue_title, issue_body, issue_labels):
             print(
-                "ℹ️  Skipping PROJECT_BRIEF.md validation (issue is about templates/documentation)"
+                "   ℹ️  Skipping validation (issue is about templates/documentation)"
             )
             return True, None
 
         project_brief_path = Path("PROJECT_BRIEF.md")
 
         if not project_brief_path.exists():
-            print("ℹ️  No PROJECT_BRIEF.md found (optional)")
+            print("   ℹ️  No PROJECT_BRIEF.md found (optional)")
             return True, None
 
-        print("📋 Validating PROJECT_BRIEF.md...")
+        print("   📋 Validating PROJECT_BRIEF.md...")
         result = validate_project_brief(project_brief_path)
 
         if result.is_valid:
-            print("✅ PROJECT_BRIEF.md validation passed")
+            print("   ✅ PROJECT_BRIEF.md validation passed")
             validation_msg = "✅ PROJECT_BRIEF.md validated successfully"
 
             if result.warnings:
-                print(f"⚠️  Validation warnings: {len(result.warnings)}")
+                print(f"   ⚠️  Validation warnings: {len(result.warnings)}")
                 for warning in result.warnings[:3]:
-                    print(f"   - {warning}")
+                    print(f"      - {warning}")
                 validation_msg += f"\n\n**Warnings ({len(result.warnings)}):**\n"
                 for warning in result.warnings[:5]:
                     validation_msg += f"- {warning}\n"
 
             return True, validation_msg
         else:
-            print("❌ PROJECT_BRIEF.md validation failed")
+            print("   ❌ PROJECT_BRIEF.md validation failed")
             for error in result.errors[:5]:
-                print(f"   - {error}")
+                print(f"      - {error}")
 
             validation_msg = "❌ PROJECT_BRIEF.md validation failed\n\n**Errors:**\n"
             for error in result.errors[:5]:
@@ -267,13 +313,17 @@ I'm working on this issue now.
 
     def _create_branch(self, branch_name: str, issue, issue_claimed: bool) -> bool:
         """Create a new git branch"""
-        print(f"🌿 Creating branch: {branch_name}")
+        print("\n" + "-"*80)
+        print("📋 STEP 4: BRANCH CREATION")
+        print("-"*80)
+        print(f"   Branch name: {branch_name}")
+        
         try:
             self.git_repo.git.checkout("-b", branch_name)
-            print(f"✅ Branch created: {branch_name}")
+            print(f"   ✅ Branch created successfully")
             return True
         except Exception as e:
-            print(f"❌ Failed to create branch: {e}")
+            print(f"   ❌ Failed to create branch: {e}")
             if issue_claimed:
                 issue.create_comment(f"❌ Failed to create branch: {e}")
                 issue.remove_from_labels("in-progress")
@@ -283,11 +333,17 @@ I'm working on this issue now.
         self, issue, issue_body: str, issue_labels: List[str]
     ) -> Optional[str]:
         """Generate a fix using Claude AI"""
+        print("\n" + "-"*80)
+        print("📋 STEP 5: GENERATING FIX WITH CLAUDE AI")
+        print("-"*80)
+        
         # Get context
         try:
             readme = self.repo.get_readme().decoded_content.decode("utf-8")[:2000]
+            print("   ✅ Loaded README context")
         except:
             readme = "No README found"
+            print("   ⚠️  No README found")
 
         # Build prompt
         prompt = f"""You are an expert software engineer. Fix this GitHub issue by modifying the necessary files.
@@ -312,10 +368,13 @@ Instructions:
 
 You have access to Read and Write tools to modify files in the current directory."""
 
-        print(f"📝 Prompt length: {len(prompt)} chars")
+        print(f"   📝 Prompt prepared ({len(prompt)} chars)")
+        print(f"   🎯 Issue type: {', '.join(issue_labels)}")
 
         # Initialize Claude CLI Agent
-        print("🤖 Starting Claude CLI Agent with Read/Write tools...")
+        print("\n   🤖 Initializing Claude CLI Agent...")
+        print("   Tools enabled: Read, Write, Bash")
+        print("   Permission mode: acceptEdits")
 
         try:
             agent = ClaudeAgent(
@@ -325,10 +384,10 @@ You have access to Read and Write tools to modify files in the current directory
                 permission_mode="acceptEdits",
             )
 
-            print("📤 Sending query to Claude (streaming output)...")
-            print("-" * 60)
+            print("\n   📤 Sending query to Claude...")
+            print("   " + "="*76)
             result = agent.query(prompt, stream_output=True)
-            print("-" * 60)
+            print("   " + "="*76)
 
             # Extract the response
             if isinstance(result, dict) and "result" in result:
@@ -336,15 +395,20 @@ You have access to Read and Write tools to modify files in the current directory
             else:
                 summary = str(result)
 
-            print(f"✅ Claude completed work")
-            print(f"📊 Summary length: {len(summary)} chars")
-            if len(summary) > 300:
-                print(f"📝 Response preview: {summary[:300]}...")
+            print(f"\n   ✅ Claude completed work successfully")
+            print(f"   📊 Response length: {len(summary)} chars")
+            
+            # Print the full output
+            print("\n   📄 CLAUDE OUTPUT:")
+            print("   " + "-"*76)
+            for line in summary.split('\n'):
+                print(f"   {line}")
+            print("   " + "-"*76)
 
             return summary
 
         except Exception as e:
-            print(f"❌ Claude Agent error: {e}")
+            print(f"\n   ❌ Claude Agent error: {e}")
             import traceback
 
             traceback.print_exc()
@@ -352,8 +416,12 @@ You have access to Read and Write tools to modify files in the current directory
 
     def _create_pr_if_changes(self, issue, branch_name: str, summary: str) -> bool:
         """Create a PR if files were modified"""
+        print("\n" + "-"*80)
+        print("📋 STEP 6: COMMITTING CHANGES & CREATING PR")
+        print("-"*80)
+        
         if not self.git_repo.is_dirty(untracked_files=True):
-            print("⚠️  No files were modified")
+            print("   ⚠️  No files were modified")
             issue.create_comment(
                 "⚠️ No changes were made. The issue may need manual review."
             )
@@ -365,11 +433,12 @@ You have access to Read and Write tools to modify files in the current directory
         untracked_files = self.git_repo.untracked_files
         files_modified = changed_files + untracked_files
 
-        print(f"📝 Files modified: {len(files_modified)}")
+        print(f"   📝 Files modified: {len(files_modified)}")
         for f in files_modified:
-            print(f"  ✏️  {f}")
+            print(f"      ✏️  {f}")
 
         # Commit changes
+        print("\n   📦 Committing changes...")
         self.git_repo.git.add("-A")
         commit_message = f"""Fix: Resolve issue #{issue.number}
 
@@ -381,14 +450,16 @@ Closes #{issue.number}
 Generated by Issue Resolver Agent using Claude Agent SDK"""
 
         self.git_repo.index.commit(commit_message)
-        print("✅ Committed changes")
+        print("   ✅ Changes committed")
 
         # Push
+        print(f"   📤 Pushing branch '{branch_name}' to origin...")
         origin = self.git_repo.remote("origin")
         origin.push(branch_name)
-        print(f"✅ Pushed branch: {branch_name}")
+        print(f"   ✅ Branch pushed successfully")
 
         # Create PR
+        print("\n   🔀 Creating Pull Request...")
         pr_title = f"Fix: {issue.title}"
         pr_body = f"""{summary[:500]}
 
@@ -404,9 +475,11 @@ Closes #{issue.number}
             title=pr_title, body=pr_body, head=branch_name, base="main"
         )
 
-        print(f"✅ Created PR #{pr.number}")
+        print(f"   ✅ Pull Request created: #{pr.number}")
+        print(f"   🔗 URL: {pr.html_url}")
 
         # Update issue
+        print("\n   💬 Updating issue with results...")
         issue.create_comment(
             f"""✅ **Solution Ready**
 
@@ -420,6 +493,16 @@ Pull Request: #{pr.number}
         )
 
         issue.remove_from_labels("in-progress")
+        print("   ✅ Issue updated and 'in-progress' label removed")
 
-        print("🎉 Complete!")
+        print("\n" + "="*80)
+        print("🎉 WORKFLOW COMPLETED SUCCESSFULLY")
+        print("="*80)
+        print(f"\n📊 SUMMARY:")
+        print(f"   Issue: #{issue.number} - {issue.title}")
+        print(f"   Branch: {branch_name}")
+        print(f"   PR: #{pr.number}")
+        print(f"   Files changed: {len(files_modified)}")
+        print(f"   Status: ✅ Ready for review")
+        print("\n" + "="*80 + "\n")
         return True

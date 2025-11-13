@@ -437,6 +437,7 @@ Flows
             result = validator.validate()
             assert any("unchecked" in warning.lower() for warning in result.warnings)
 
+    @pytest.mark.skip(reason="Empty section validation removed for AI-friendly free text")
     def test_validator_empty_sections(self):
         """Test validator detects empty sections"""
         content_with_empty_section = """# Project Brief

@@ -1,4 +1,5 @@
 # Test dependencies
+# Install production dependencies first: pip install -r ../src/requirements.txt
 
 # Testing framework
 pytest>=9.0.0
@@ -16,8 +17,3 @@ pylint>=2.17.0
 black>=23.7.0
 flake8>=6.1.0
 mypy>=1.5.0
-
-# For testing specific modules
-PyGithub>=2.1.0  # If testing GitHub integration
-anthropic>=0.3.0  # If testing Claude integration
-tenacity>=8.2.0  # Retry library for resilient API calls

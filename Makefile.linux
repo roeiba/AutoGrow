@@ -71,11 +71,12 @@ install-gemini:
 
 # Install Python test dependencies
 install-test-deps:
-	@echo "📦 Installing Python test dependencies..."
+	@echo "📦 Installing Python dependencies..."
 	@if command -v python3 >/dev/null 2>&1; then \
 		python3 -m pip install --upgrade pip; \
+		python3 -m pip install -r src/requirements.txt; \
 		python3 -m pip install -r tests/requirements.txt; \
-		echo "✅ Test dependencies installed"; \
+		echo "✅ Dependencies installed"; \
 	else \
 		echo "❌ Python 3 not found. Install with: sudo apt-get install python3 python3-pip"; \
 		exit 1; \

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import model configuration
 from models_config import CLAUDE_MODELS, SystemPrompts
+from utils.retry import retry_anthropic_api, retry_github_api
 
 # Import Claude CLI Agent or fallback to Anthropic SDK
 try:
@@ -96,20 +97,28 @@ class QAAgent:
 
         context = {"issues": [], "pull_requests": [], "commits": [], "repo_info": {}}
 
-        # Get repository info
-        context["repo_info"] = {
-            "name": self.repo.name,
-            "description": self.repo.description,
-            "open_issues_count": self.repo.open_issues_count,
-            "stargazers_count": self.repo.stargazers_count,
-            "language": self.repo.language,
-        }
+        # Get repository info with retry
+        @retry_github_api
+        def get_repo_info():
+            return {
+                "name": self.repo.name,
+                "description": self.repo.description,
+                "open_issues_count": self.repo.open_issues_count,
+                "stargazers_count": self.repo.stargazers_count,
+                "language": self.repo.language,
+            }
 
-        # Get recent issues
+        context["repo_info"] = get_repo_info()
+
+        # Get recent issues with retry
+        @retry_github_api
+        def get_issues():
+            return list(
+                self.repo.get_issues(state="all", sort="updated", direction="desc")
+            )[: self.max_issues]
+
         print(f"📋 Reviewing {self.max_issues} recent issues...")
-        issues = list(
-            self.repo.get_issues(state="all", sort="updated", direction="desc")
-        )[: self.max_issues]
+        issues = get_issues()
         for issue in issues:
             if issue.pull_request:
                 continue
@@ -125,11 +134,15 @@ class QAAgent:
                 }
             )
 
-        # Get recent pull requests
+        # Get recent pull requests with retry
+        @retry_github_api
+        def get_prs():
+            return list(self.repo.get_pulls(state="all", sort="updated", direction="desc"))[
+                : self.max_prs
+            ]
+
         print(f"🔀 Reviewing {self.max_prs} recent pull requests...")
-        prs = list(self.repo.get_pulls(state="all", sort="updated", direction="desc"))[
-            : self.max_prs
-        ]
+        prs = get_prs()
         for pr in prs:
             context["pull_requests"].append(
                 {
@@ -145,9 +158,13 @@ class QAAgent:
                 }
             )
 
-        # Get recent commits
+        # Get recent commits with retry
+        @retry_github_api
+        def get_commits():
+            return list(self.repo.get_commits())[: self.max_commits]
+
         print(f"📝 Reviewing {self.max_commits} recent commits...")
-        commits = list(self.repo.get_commits())[: self.max_commits]
+        commits = get_commits()
         for commit in commits:
             context["commits"].append(
                 {
@@ -263,13 +280,18 @@ Output ONLY the JSON, nothing else.
                     response_text = str(result)
             else:
                 print("🤖 Using Anthropic API...")
-                client = Anthropic(api_key=self.anthropic_api_key)
-                message = client.messages.create(
-                    model=CLAUDE_MODELS.QA_ANALYSIS,
-                    max_tokens=CLAUDE_MODELS.QA_MAX_TOKENS,
-                    system=SystemPrompts.QA_ENGINEER,
-                    messages=[{"role": "user", "content": prompt}],
-                )
+
+                @retry_anthropic_api
+                def call_anthropic():
+                    client = Anthropic(api_key=self.anthropic_api_key)
+                    return client.messages.create(
+                        model=CLAUDE_MODELS.QA_ANALYSIS,
+                        max_tokens=CLAUDE_MODELS.QA_MAX_TOKENS,
+                        system=SystemPrompts.QA_ENGINEER,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+
+                message = call_anthropic()
                 response_text = message.content[0].text
 
             print(f"✅ Received response ({len(response_text)} chars)")
@@ -423,13 +445,17 @@ Output ONLY the JSON, nothing else.
             if cat in ["security", "code_quality", "process", "health"]:
                 labels.append(cat)
 
-        # Create the issue
+        # Create the issue with retry
         try:
-            issue_title = f"QA Report: {summary[:60]}"
-            new_issue = self.repo.create_issue(
-                title=issue_title, body=body, labels=labels
-            )
-            print(f"✅ Created QA issue #{new_issue.number}: {issue_title}")
+            @retry_github_api
+            def create_issue():
+                issue_title = f"QA Report: {summary[:60]}"
+                return self.repo.create_issue(
+                    title=issue_title, body=body, labels=labels
+                )
+
+            new_issue = create_issue()
+            print(f"✅ Created QA issue #{new_issue.number}: {new_issue.title}")
             return new_issue
         except Exception as e:
             print(f"❌ Failed to create issue: {e}")

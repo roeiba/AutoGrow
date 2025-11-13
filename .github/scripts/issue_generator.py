@@ -14,8 +14,9 @@ from github import Github, Auth
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-# Import core agent
+# Import core agent and retry utilities
 from agents.issue_generator import IssueGenerator
+from utils.retry import retry_github_api
 
 # Configuration from environment
 MIN_ISSUES = int(os.getenv('MIN_OPEN_ISSUES', '3'))
@@ -27,11 +28,14 @@ if not GITHUB_TOKEN or not REPO_NAME:
     print("❌ Missing required environment variables: GITHUB_TOKEN, REPO_NAME")
     sys.exit(1)
 
-# Initialize GitHub client
-auth = Auth.Token(GITHUB_TOKEN)
-gh = Github(auth=auth)
-repo = gh.get_repo(REPO_NAME)
+# Initialize GitHub client with retry
+@retry_github_api
+def initialize_github():
+    auth = Auth.Token(GITHUB_TOKEN)
+    gh = Github(auth=auth)
+    return gh.get_repo(REPO_NAME)
 
+repo = initialize_github()
 print(f"✅ Connected to repository: {REPO_NAME}")
 
 # Run the agent

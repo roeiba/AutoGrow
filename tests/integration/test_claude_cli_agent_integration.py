@@ -339,13 +339,9 @@ class TestClaudeAgentIntegrationErrorHandling:
     def test_invalid_file_in_batch(self, agent):
         """Test batch processing with invalid directory"""
         with pytest.raises(CustomFileNotFoundError):
-            results = agent.batch_process(
+            agent.batch_process(
                 "/nonexistent/directory", "test", file_pattern="*.py"
             )
-
-        # Should return empty list or handle gracefully
-        assert results == []
-        assert isinstance(results, list)
 
 
 class TestClaudeAgentIntegrationEndToEnd:

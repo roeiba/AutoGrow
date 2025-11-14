@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoGrow Showcase - Real Projects Built with AI</title>
+    <meta name="description" content="Explore real-world projects built using AutoGrow's autonomous AI development methodology">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .controls label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .controls select, .controls input {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .controls select:focus, .controls input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .stats {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .project-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+        }
+
+        .project-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .project-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid #667eea;
+        }
+
+        .project-title {
+            flex: 1;
+        }
+
+        .project-name {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .project-owner {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .project-description {
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.5;
+            min-height: 60px;
+        }
+
+        .project-meta {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .meta-item svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .empty-state {
+            background: white;
+            padding: 60px;
+            border-radius: 12px;
+            text-align: center;
+            color: #666;
+        }
+
+        .empty-state h2 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+
+        .cta-button:hover {
+            background: #5568d3;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            padding: 40px 20px;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌱 AutoGrow Showcase</h1>
+            <p class="subtitle">Real projects built with autonomous AI development</p>
+            <a href="https://github.com/roeiba/AutoGrow" class="cta-button">Fork AutoGrow on GitHub</a>
+        </header>
+
+        <div class="stats" id="stats">
+            <div class="stat-item">
+                <div class="stat-number" id="totalForks">-</div>
+                <div class="stat-label">Total Forks</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="totalStars">-</div>
+                <div class="stat-label">Total Stars</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="activeProjects">-</div>
+                <div class="stat-label">Active Projects</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <label for="sortBy">Sort by:</label>
+            <select id="sortBy">
+                <option value="stars">⭐ Stars</option>
+                <option value="forks">🔱 Forks</option>
+                <option value="updated">🕐 Recently Updated</option>
+                <option value="created">📅 Newest</option>
+            </select>
+
+            <label for="searchInput">Search:</label>
+            <input type="text" id="searchInput" placeholder="Search projects...">
+        </div>
+
+        <div id="projectsContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading amazing projects...</p>
+            </div>
+        </div>
+
+        <footer>
+            <p>Built with AutoGrow - The world's first fully autonomous, self-growing software project</p>
+            <p style="margin-top: 10px; font-size: 0.9rem;">
+                <a href="https://github.com/roeiba/AutoGrow" style="color: white;">View on GitHub</a>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        const REPO_OWNER = 'roeiba';
+        const REPO_NAME = 'AutoGrow';
+        let allProjects = [];
+
+        async function fetchForks() {
+            try {
+                const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/forks?per_page=100&sort=stargazers`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch forks');
+                }
+
+                const forks = await response.json();
+                
+                // Fetch additional details for each fork
+                const projectsWithDetails = await Promise.all(
+                    forks.map(async (fork) => {
+                        try {
+                            // Get commit activity to determine if project is active
+                            const commitsResponse = await fetch(fork.commits_url.replace('{/sha}', '?per_page=1'));
+                            const commits = await commitsResponse.json();
+                            const lastCommit = commits[0]?.commit?.author?.date || fork.updated_at;
+
+                            return {
+                                name: fork.name,
+                                fullName: fork.full_name,
+                                owner: fork.owner.login,
+                                ownerAvatar: fork.owner.avatar_url,
+                                description: fork.description || 'No description provided',
+                                stars: fork.stargazers_count,
+                                forks: fork.forks_count,
+                                language: fork.language,
+                                url: fork.html_url,
+                                updated: new Date(fork.updated_at),
+                                created: new Date(fork.created_at),
+                                lastCommit: new Date(lastCommit),
+                                isActive: isProjectActive(lastCommit)
+                            };
+                        } catch (error) {
+                            console.error(`Error fetching details for ${fork.full_name}:`, error);
+                            return null;
+                        }
+                    })
+                );
+
+                allProjects = projectsWithDetails.filter(p => p !== null);
+                updateStats();
+                displayProjects(allProjects);
+            } catch (error) {
+                console.error('Error fetching forks:', error);
+                document.getElementById('projectsContainer').innerHTML = `
+                    <div class="error">
+                        <h2>Oops! Something went wrong</h2>
+                        <p>Unable to load projects. Please try again later.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function isProjectActive(lastCommitDate) {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            return new Date(lastCommitDate) > thirtyDaysAgo;
+        }
+
+        function updateStats() {
+            const totalStars = allProjects.reduce((sum, p) => sum + p.stars, 0);
+            const activeProjects = allProjects.filter(p => p.isActive).length;
+
+            document.getElementById('totalForks').textContent = allProjects.length;
+            document.getElementById('totalStars').textContent = totalStars;
+            document.getElementById('activeProjects').textContent = activeProjects;
+        }
+
+        function displayProjects(projects) {
+            const container = document.getElementById('projectsContainer');
+
+            if (projects.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h2>No projects found</h2>
+                        <p>Be the first to build something amazing with AutoGrow!</p>
+                        <a href="https://github.com/roeiba/AutoGrow/fork" class="cta-button">Fork AutoGrow Now</a>
+                    </div>
+                `;
+                return;
+            }
+
+            const projectsHTML = projects.map(project => `
+                <div class="project-card" onclick="window.open('${project.url}', '_blank')">
+                    <div class="project-header">
+                        <img src="${project.ownerAvatar}" alt="${project.owner}" class="project-avatar">
+                        <div class="project-title">
+                            <div class="project-name">${project.name}</div>
+                            <div class="project-owner">by ${project.owner}</div>
+                        </div>
+                    </div>
+                    <div class="project-description">${project.description}</div>
+                    <div class="project-meta">
+                        <div class="meta-item">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+                            </svg>
+                            ${project.stars}
+                        </div>
+                        <div class="meta-item">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"/>
+                            </svg>
+                            ${project.forks}
+                        </div>
+                        ${project.language ? `
+                        <div class="meta-item">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M1.5 2.75a.25.25 0 01.25-.25h12.5a.25.25 0 01.25.25v10.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25V2.75z"/>
+                            </svg>
+                            ${project.language}
+                        </div>
+                        ` : ''}
+                        <div class="meta-item">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 0a8 8 0 110 16A8 8 0 018 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zm7-3.25v2.992l2.028.812a.75.75 0 01-.557 1.392l-2.5-1A.75.75 0 017 8.25v-3.5a.75.75 0 011.5 0z"/>
+                            </svg>
+                            ${formatDate(project.updated)}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = `<div class="projects-grid">${projectsHTML}</div>`;
+        }
+
+        function formatDate(date) {
+            const now = new Date();
+            const diffTime = Math.abs(now - date);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            if (diffDays < 7) return `${diffDays} days ago`;
+            if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+            if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+            return `${Math.floor(diffDays / 365)} years ago`;
+        }
+
+        function sortProjects(projects, sortBy) {
+            const sorted = [...projects];
+            
+            switch(sortBy) {
+                case 'stars':
+                    return sorted.sort((a, b) => b.stars - a.stars);
+                case 'forks':
+                    return sorted.sort((a, b) => b.forks - a.forks);
+                case 'updated':
+                    return sorted.sort((a, b) => b.updated - a.updated);
+                case 'created':
+                    return sorted.sort((a, b) => b.created - a.created);
+                default:
+                    return sorted;
+            }
+        }
+
+        function filterProjects(projects, searchTerm) {
+            if (!searchTerm) return projects;
+            
+            const term = searchTerm.toLowerCase();
+            return projects.filter(project => 
+                project.name.toLowerCase().includes(term) ||
+                project.owner.toLowerCase().includes(term) ||
+                project.description.toLowerCase().includes(term) ||
+                (project.language && project.language.toLowerCase().includes(term))
+            );
+        }
+
+        // Event listeners
+        document.getElementById('sortBy').addEventListener('change', (e) => {
+            const searchTerm = document.getElementById('searchInput').value;
+            let filtered = filterProjects(allProjects, searchTerm);
+            let sorted = sortProjects(filtered, e.target.value);
+            displayProjects(sorted);
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const sortBy = document.getElementById('sortBy').value;
+            let filtered = filterProjects(allProjects, e.target.value);
+            let sorted = sortProjects(filtered, sortBy);
+            displayProjects(sorted);
+        });
+
+        // Initialize
+        fetchForks();
+    </script>
+</body>
+</html>

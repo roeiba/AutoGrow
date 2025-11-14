@@ -4,6 +4,8 @@
 
 Welcome to AutoGrow - the world's first fully autonomous, self-growing software project!
 
+**[🌟 View Live Showcase](https://roeiba.github.io/AutoGrow/)** - See real projects built with AutoGrow
+
 ## 🚀 Quick Start
 
 **New to AutoGrow?** Start here:
@@ -92,6 +94,8 @@ AI agents should read `.agents/project-rules.md` for code generation guidelines.
 ```
 docs/
 ├── README.md                    # This file
+├── index.html                   # AutoGrow Showcase (GitHub Pages)
+├── _config.yml                  # GitHub Pages config
 ├── SETUP_GUIDE.md              # Setup instructions
 ├── GITHUB_SECRETS.md           # Secrets configuration
 ├── QA_AGENT.md                 # QA documentation

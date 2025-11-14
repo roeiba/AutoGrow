@@ -35,11 +35,15 @@ Step 1: Fork & Setup          Step 2: Commit                Step 3: Watch It Gro
 
 See real-world projects using AutoGrow methodology:
 
-**[View all AutoGrow forks →](https://github.com/roeiba/AutoGrow/forks)**
+**[🚀 View AutoGrow Showcase →](https://roeiba.github.io/AutoGrow/)** - Interactive gallery with sorting & filtering
 
-These are real projects built by developers who forked AutoGrow and let AI agents grow their codebases autonomously. Browse them for inspiration, see different use cases, and discover how others are leveraging autonomous development.
+Browse real projects built by developers who forked AutoGrow and let AI agents grow their codebases autonomously. The showcase features:
+- 📊 **Sortable by stars, forks, or activity** - Find the most popular or recently updated projects
+- 🔍 **Search & filter** - Discover projects by name, owner, or technology
+- 📈 **Live stats** - See total forks, stars, and active projects
+- 💡 **Real inspiration** - Learn from different use cases and implementations
 
-**Built something with AutoGrow?** We'd love to showcase your project! Fork this repo and your project will automatically appear in the forks list. For featured placement, open an issue or discussion with your project details.
+**Built something with AutoGrow?** Fork this repo and your project will automatically appear in the showcase! For featured placement, open an issue or discussion with your project details.
 
 ## 🎯 What Is AutoGrow?
 

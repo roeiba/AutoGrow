@@ -13,8 +13,10 @@ from typing import Optional, List, Tuple
 import git
 
 # Add src directory to path to import modules
-sys.path.insert(0, str(Path(__file__).parent.parent / "claude-agent"))
-sys.path.insert(0, str(Path(__file__).parent.parent))
+src_dir = Path(__file__).parent.parent
+claude_agent_dir = src_dir / "claude-agent"
+sys.path.insert(0, str(claude_agent_dir))
+sys.path.insert(0, str(src_dir))
 
 # Import logging
 from logging_config import get_logger
@@ -41,12 +43,11 @@ logger = get_logger(__name__)
 # Import Claude CLI Agent
 try:
     from claude_cli_agent import ClaudeAgent
-
     USE_CLAUDE_CLI = True
-except ImportError:
-    logger.warning("claude_cli_agent not available, falling back to anthropic SDK")
+    logger.info("✅ Claude CLI Agent imported successfully")
+except ImportError as e:
+    logger.warning(f"⚠️  claude_cli_agent not available: {e}, falling back to anthropic SDK")
     from anthropic import Anthropic
-
     USE_CLAUDE_CLI = False
 
 # Import model configuration

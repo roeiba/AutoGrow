@@ -9,25 +9,46 @@ Core logic is in src/agents/issue_resolver.py
 import os
 import sys
 from pathlib import Path
-from github import Github, Auth
-import git
 
-# Add src directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
+# Add src directory to path FIRST before any other imports
+project_root = Path(__file__).parent.parent.parent
+src_dir = project_root / 'src'
+sys.path.insert(0, str(src_dir))
+
+print(f"🔍 Python path configured:")
+print(f"   Project root: {project_root}")
+print(f"   Src directory: {src_dir}")
+print(f"   Python version: {sys.version}")
+
+try:
+    from github import Github, Auth
+    import git
+    print("✅ External dependencies imported successfully")
+except ImportError as e:
+    print(f"❌ Failed to import external dependencies: {e}")
+    sys.exit(1)
 
 # Import core agent and utilities
-from agents.issue_resolver import IssueResolver
-from utils.github_helpers import get_repository
-from utils.exceptions import (
-    MissingEnvironmentVariableError,
-    GitHubAPIError,
-    CreditBalanceError,
-    RateLimitError,
-    AuthenticationError,
-    AnthropicAPIError,
-    get_exception_for_github_error
-)
-from logging_config import get_logger
+try:
+    from agents.issue_resolver import IssueResolver
+    from utils.github_helpers import get_repository
+    from utils.exceptions import (
+        MissingEnvironmentVariableError,
+        GitHubAPIError,
+        CreditBalanceError,
+        RateLimitError,
+        AuthenticationError,
+        AnthropicAPIError,
+        get_exception_for_github_error
+    )
+    from logging_config import get_logger
+    print("✅ Project modules imported successfully")
+except ImportError as e:
+    print(f"❌ Failed to import project modules: {e}")
+    print(f"   Current sys.path: {sys.path}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
 
 # Initialize logger
 logger = get_logger(__name__)

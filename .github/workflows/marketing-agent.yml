@@ -5,6 +5,22 @@ on:
     # Example: run every day at 08:00 UTC
     - cron: '0 8 * * *'
 
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/marketing-agent.yml'
+      - '.github/workflows/specialized-agents.yml'
+      - 'src/agents/marketing_agent.py'
+      - 'src/agents/base_issue_agent.py'
+
+  pull_request:
+    paths:
+      - '.github/workflows/marketing-agent.yml'
+      - '.github/workflows/specialized-agents.yml'
+      - 'src/agents/marketing_agent.py'
+      - 'src/agents/base_issue_agent.py'
+
   workflow_dispatch:
     inputs:
       dry_mode:
@@ -24,7 +40,17 @@ permissions:
   pull-requests: read
 
 jobs:
+  validate-on-change:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    uses: ./.github/workflows/specialized-agents.yml
+    secrets: inherit
+    with:
+      agent: marketing
+      dry_mode: true
+      min_issues: '1'
+
   run-marketing-agent:
+    if: github.event_name != 'pull_request' && github.event_name != 'push'
     uses: ./.github/workflows/specialized-agents.yml
     secrets: inherit
     with:

@@ -3,6 +3,21 @@ name: QA Agent
 on:
   schedule:
     - cron: '0 */4 * * *'  # Every 4 hours
+
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/qa-agent.yml'
+      - '.github/scripts/qa_agent.py'
+      - 'src/agents/qa_agent.py'
+
+  pull_request:
+    paths:
+      - '.github/workflows/qa-agent.yml'
+      - '.github/scripts/qa_agent.py'
+      - 'src/agents/qa_agent.py'
+
   workflow_dispatch:
 
 env:
@@ -11,7 +26,50 @@ env:
   MAX_COMMITS_TO_REVIEW: ${{ vars.MAX_COMMITS_TO_REVIEW || '10' }}
 
 jobs:
+  validate-on-change:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    permissions:
+      issues: write
+      contents: read
+      pull-requests: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Claude Code CLI
+        run: |
+          npm install -g @anthropic-ai/claude-code || echo "Claude CLI not available, will use API fallback"
+        continue-on-error: true
+      
+      - name: Install dependencies
+        run: pip install -r src/requirements.txt
+      
+      - name: Validate QA Agent (Dry Run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPO_NAME: ${{ github.repository }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          echo "🔍 Validating QA Agent in dry mode..."
+          echo "This is a validation run - no issues will be created"
+          python -c "from src.agents.qa_agent import QAAgent; print('✅ QA Agent imports successfully')"
+
   qa-check:
+    if: github.event_name != 'pull_request' && github.event_name != 'push'
     runs-on: ubuntu-latest
     concurrency:
       group: qa-agent

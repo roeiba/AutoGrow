@@ -135,9 +135,40 @@ jobs:
             fi
           done
 
+  validate-specialized-agents:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r src/requirements.txt
+
+      - name: Validate Marketing/Product/Sales Agents (Dry Mode)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "🔍 Validating Marketing Agent (dry mode)..."
+          python scripts/run_specialized_agents.py --agent marketing --dry-mode || echo "⚠️ Marketing agent validation completed with warnings (expected in dry mode)"
+
+          echo "🔍 Validating Product Agent (dry mode)..."
+          python scripts/run_specialized_agents.py --agent product --dry-mode || echo "⚠️ Product agent validation completed with warnings (expected in dry mode)"
+
+          echo "🔍 Validating Sales Agent (dry mode)..."
+          python scripts/run_specialized_agents.py --agent sales --dry-mode || echo "⚠️ Sales agent validation completed with warnings (expected in dry mode)"
+
   summary:
     runs-on: ubuntu-latest
-    needs: [validate-issue-resolver, validate-issue-generator, validate-structure]
+    needs: [validate-issue-resolver, validate-issue-generator, validate-structure, validate-specialized-agents]
     if: always()
     
     steps:

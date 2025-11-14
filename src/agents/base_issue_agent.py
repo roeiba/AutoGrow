@@ -483,7 +483,7 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                     "proposed": len(issues_to_create),
                     "duplicates_filtered": len(duplicates),
                     "quality_rejected": quality_rejected,
-                    "created": created_count,
+                    "issues_created": created_count,
                 }
             )
 

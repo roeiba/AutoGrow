@@ -15,9 +15,9 @@ import git
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-# Import core agent, retry utilities, and exceptions
+# Import core agent and utilities
 from agents.issue_resolver import IssueResolver
-from utils.retry import retry_github_api
+from utils.github_helpers import get_repository
 from utils.exceptions import (
     MissingEnvironmentVariableError,
     GitHubAPIError,
@@ -49,15 +49,11 @@ if not GITHUB_TOKEN or not REPO_NAME:
     })
     raise MissingEnvironmentVariableError("GITHUB_TOKEN or REPO_NAME")
 
-# Initialize GitHub client with retry
-@retry_github_api
-def initialize_github():
+# Initialize GitHub client with retry using shared utility
+try:
     auth = Auth.Token(GITHUB_TOKEN)
     gh = Github(auth=auth)
-    return gh.get_repo(REPO_NAME)
-
-try:
-    repo = initialize_github()
+    repo = get_repository(gh, REPO_NAME)
     logger.info(f"Connected to repository: {REPO_NAME}")
 except Exception as e:
     logger.error(f"Failed to connect to GitHub repository: {REPO_NAME}")

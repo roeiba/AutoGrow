@@ -14,9 +14,14 @@ from github import Github, Auth
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-# Import core agent and retry utilities
+# Import core agent, retry utilities, and exceptions
 from agents.qa_agent import QAAgent
 from utils.retry import retry_github_api
+from utils.exceptions import MissingEnvironmentVariableError, get_exception_for_github_error
+from logging_config import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Configuration from environment
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -27,8 +32,11 @@ MAX_PRS_TO_REVIEW = int(os.getenv('MAX_PRS_TO_REVIEW', '5'))
 MAX_COMMITS_TO_REVIEW = int(os.getenv('MAX_COMMITS_TO_REVIEW', '10'))
 
 if not GITHUB_TOKEN or not REPO_NAME:
-    print("❌ Missing required environment variables: GITHUB_TOKEN, REPO_NAME")
-    sys.exit(1)
+    logger.error("Missing required environment variables", extra={
+        "has_github_token": bool(GITHUB_TOKEN),
+        "has_repo_name": bool(REPO_NAME)
+    })
+    raise MissingEnvironmentVariableError("GITHUB_TOKEN or REPO_NAME")
 
 # Initialize GitHub client with retry
 @retry_github_api
@@ -37,9 +45,12 @@ def initialize_github():
     gh = Github(auth=auth)
     return gh.get_repo(REPO_NAME)
 
-repo = initialize_github()
-print(f"✅ Connected to repository: {REPO_NAME}")
-
+try:
+    repo = initialize_github()
+    logger.info(f"Connected to repository: {REPO_NAME}")
+except Exception as e:
+    logger.error(f"Failed to connect to GitHub repository: {REPO_NAME}")
+    raise get_exception_for_github_error(e, f"Failed to connect to repository {REPO_NAME}")
 
 # Run the agent
 try:
@@ -50,14 +61,13 @@ try:
         max_prs_to_review=MAX_PRS_TO_REVIEW,
         max_commits_to_review=MAX_COMMITS_TO_REVIEW
     )
-    
+
     success = agent.run_qa_check()
-    
+    logger.info("QA agent completed successfully")
+
     if not success:
         sys.exit(1)
-        
+
 except Exception as e:
-    print(f"\n❌ Fatal error: {e}")
-    import traceback
-    traceback.print_exc()
+    logger.exception("Fatal error in QA agent")
     sys.exit(1)

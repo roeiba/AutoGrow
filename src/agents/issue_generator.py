@@ -20,6 +20,19 @@ from utils.retry import retry_anthropic_api, retry_github_api
 from utils.deduplication import IssueDuplicateChecker
 from utils.outcome_tracker import OutcomeTracker
 from utils.feedback_analyzer import FeedbackAnalyzer
+from utils.exceptions import (
+    AgentResponseError,
+    JSONParseError,
+    MissingEnvironmentVariableError,
+    GitHubAPIError,
+    AnthropicAPIError,
+    get_exception_for_github_error,
+    get_exception_for_anthropic_error,
+)
+from logging_config import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Import Claude CLI Agent or fallback to Anthropic SDK
 try:
@@ -31,7 +44,7 @@ except ImportError:
     try:
         from anthropic import Anthropic
     except ImportError:
-        print("❌ Neither claude_cli_agent nor anthropic SDK available")
+        logger.error("Neither claude_cli_agent nor anthropic SDK available")
         raise
 
 
@@ -55,6 +68,12 @@ class IssueGenerator:
         self.min_issues = min_issues
         self.dry_mode = dry_mode
 
+        logger.info(f"Initialized IssueGenerator for repo {repo.full_name}", extra={
+            "min_issues": min_issues,
+            "dry_mode": dry_mode,
+            "use_claude_cli": USE_CLAUDE_CLI
+        })
+
         # Initialize duplicate checker with tuned thresholds
         self.duplicate_checker = IssueDuplicateChecker(
             title_similarity_threshold=0.75,
@@ -73,26 +92,30 @@ class IssueGenerator:
         Returns:
             bool: True if issues were generated, False otherwise
         """
-        print(f"🔍 Checking issue count (minimum: {self.min_issues})")
+        logger.info(f"Checking issue count (minimum: {self.min_issues})")
 
         # Count open issues (excluding pull requests) with retry
         @retry_github_api
         def get_open_issues():
             return list(self.repo.get_issues(state="open"))
 
-        open_issues = get_open_issues()
+        try:
+            open_issues = get_open_issues()
+        except Exception as e:
+            raise get_exception_for_github_error(e, "Failed to fetch open issues")
+
         open_issues = [i for i in open_issues if not i.pull_request]
         issue_count = len(open_issues)
 
-        print(f"📊 Current open issues: {issue_count}")
+        logger.info(f"Current open issues: {issue_count}")
 
         if issue_count >= self.min_issues:
-            print(f"✅ Sufficient issues exist ({issue_count} >= {self.min_issues})")
+            logger.info(f"Sufficient issues exist ({issue_count} >= {self.min_issues})")
             return False
 
         # Need to generate issues
         needed = self.min_issues - issue_count
-        print(f"🤖 Generating {needed} new issue(s)...")
+        logger.info(f"Generating {needed} new issue(s)...")
 
         self._generate_issues(needed, open_issues)
         return True
@@ -106,51 +129,57 @@ class IssueGenerator:
             open_issues: List of current open issues
         """
         # Get repository context with retry
-        print("📖 Analyzing repository for potential issues...")
+        logger.info("Analyzing repository for potential issues...")
 
         @retry_github_api
         def get_readme():
             try:
                 return self.repo.get_readme().decoded_content.decode("utf-8")[:1000]
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to fetch README: {e}")
                 return "No README found"
 
         @retry_github_api
         def get_commits():
             return list(self.repo.get_commits()[:5])
 
-        readme = get_readme()
-        recent_commits = get_commits()
+        try:
+            readme = get_readme()
+            recent_commits = get_commits()
+        except Exception as e:
+            raise get_exception_for_github_error(e, "Failed to fetch repository context")
+
         commit_messages = "\n".join(
             [f"- {c.commit.message.split(chr(10))[0]}" for c in recent_commits]
         )
 
         # Get feedback-based generation guidance
-        print("📊 Analyzing feedback data for adaptive generation...")
+        logger.info("Analyzing feedback data for adaptive generation...")
         guidance = self.feedback_analyzer.get_generation_guidance()
         overall_stats = self.outcome_tracker.get_overall_stats()
 
         if overall_stats['total_attempts'] > 0:
-            print(f"   💡 Historical success rate: {overall_stats['success_rate']:.1%}")
-            print(f"   🎯 {guidance.focus_message}")
+            logger.info(f"Historical success rate: {overall_stats['success_rate']:.1%}", extra={
+                "success_rate": overall_stats['success_rate'],
+                "focus_message": guidance.focus_message
+            })
             if guidance.high_priority_types:
-                print(f"   ✅ Prioritizing: {', '.join(guidance.high_priority_types)}")
+                logger.info(f"Prioritizing: {', '.join(guidance.high_priority_types)}")
             if guidance.low_priority_types:
-                print(f"   ⚠️  De-emphasizing: {', '.join(guidance.low_priority_types)}")
+                logger.info(f"De-emphasizing: {', '.join(guidance.low_priority_types)}")
         else:
-            print("   ℹ️  No historical data yet - using default generation")
+            logger.info("No historical data yet - using default generation")
 
         # Build prompt for Claude with adaptive guidance
         prompt = self._build_prompt(needed, readme, commit_messages, open_issues, guidance)
 
-        print(f"📝 Prompt length: {len(prompt)} chars")
+        logger.debug(f"Prompt length: {len(prompt)} chars")
 
         # Call Claude AI
         response_text = self._call_claude(prompt)
 
         if not response_text:
-            print("❌ Failed to get response from Claude")
-            sys.exit(1)
+            raise AgentResponseError("Failed to get response from Claude")
 
         # Parse and create issues (with deduplication)
         self._parse_and_create_issues(response_text, needed, open_issues)
@@ -204,7 +233,7 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
         """Call Claude AI (CLI or API)"""
         try:
             if USE_CLAUDE_CLI:
-                print("🤖 Using Claude CLI...")
+                logger.info("Using Claude CLI for issue generation")
                 agent = ClaudeAgent(output_format="text", verbose=True)
 
                 result = agent.query(
@@ -217,7 +246,7 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                 else:
                     return str(result)
             else:
-                print("🤖 Using Anthropic API...")
+                logger.info("Using Anthropic API for issue generation")
 
                 @retry_anthropic_api
                 def call_anthropic():
@@ -233,16 +262,13 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                 return message.content[0].text
 
         except Exception as e:
-            print(f"❌ Error calling Claude: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return None
+            logger.exception("Error calling Claude API")
+            raise get_exception_for_anthropic_error(e, "Failed to call Claude API")
 
     def _parse_and_create_issues(self, response_text: str, needed: int, open_issues: List) -> None:
         """Parse Claude response and create GitHub issues after deduplication check"""
         try:
-            print("🔍 Parsing Claude response...")
+            logger.info("Parsing Claude response...")
 
             # Clean up response - remove markdown code blocks if present
             cleaned_response = response_text.strip()
@@ -250,48 +276,54 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                 cleaned_response = (
                     cleaned_response.split("```json")[1].split("```")[0].strip()
                 )
-                print("📝 Removed ```json``` markers")
+                logger.debug("Removed ```json``` markers")
             elif "```" in cleaned_response:
                 cleaned_response = (
                     cleaned_response.split("```")[1].split("```")[0].strip()
                 )
-                print("📝 Removed ``` markers")
+                logger.debug("Removed ``` markers")
 
             # Find JSON object in response
             start_idx = cleaned_response.find("{")
             end_idx = cleaned_response.rfind("}") + 1
 
             if start_idx == -1 or end_idx == 0:
-                raise ValueError("No JSON object found in response")
+                raise JSONParseError(response_text, "No JSON object found in response")
 
             json_str = cleaned_response[start_idx:end_idx]
-            print(f"📊 Extracted JSON: {len(json_str)} chars")
+            logger.debug(f"Extracted JSON: {len(json_str)} chars")
 
-            data = json.loads(json_str)
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                raise JSONParseError(json_str, str(e))
+
             issues_to_create = data.get("issues", [])[:needed]
 
             if not issues_to_create:
-                print("⚠️  No issues generated by Claude")
+                logger.warning("No issues generated by Claude")
                 return
 
             # Perform deduplication check
-            print(f"🔎 Checking {len(issues_to_create)} proposed issue(s) for duplicates...")
+            logger.info(f"Checking {len(issues_to_create)} proposed issue(s) for duplicates...")
             unique_issues, duplicates = self.duplicate_checker.check_issue_list(
                 issues_to_create, open_issues, verbose=True
             )
 
             # Report deduplication results
             if duplicates:
-                print(f"🚫 Filtered out {len(duplicates)} duplicate issue(s):")
+                logger.info(f"Filtered out {len(duplicates)} duplicate issue(s)")
                 for dup_issue, existing, scores in duplicates:
-                    print(f"   - '{dup_issue['title'][:50]}' (similar to #{existing.number}, "
-                          f"similarity: {scores['combined_similarity']:.1%})")
+                    logger.debug(
+                        f"Duplicate detected: '{dup_issue['title'][:50]}' similar to #{existing.number}",
+                        extra={"similarity_score": scores['combined_similarity']}
+                    )
 
             if not unique_issues:
-                print("⚠️  All proposed issues were duplicates - no new issues created")
+                logger.warning("All proposed issues were duplicates - no new issues created")
                 return
 
-            print(f"✅ {len(unique_issues)} unique issue(s) to create")
+            logger.info(f"{len(unique_issues)} unique issue(s) to create")
 
             # Create issues with retry
             created_count = 0
@@ -305,8 +337,7 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                 full_body = f"{body}\n\n---\n*Generated by Issue Generator Agent*"
 
                 if self.dry_mode:
-                    print(f"🔍 DRY MODE: Would create issue: {title}")
-                    print(f"   Labels: {labels}")
+                    logger.info(f"DRY MODE: Would create issue: {title}", extra={"labels": labels})
                     created_count += 1
                 else:
                     @retry_github_api
@@ -315,31 +346,33 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                             title=title, body=full_body, labels=labels
                         )
 
-                    new_issue = create_issue()
-                    created_count += 1
-                    print(f"✅ Created issue #{new_issue.number}: {title}")
+                    try:
+                        new_issue = create_issue()
+                        created_count += 1
+                        logger.info(f"Created issue #{new_issue.number}: {title}")
+                    except Exception as e:
+                        logger.error(f"Failed to create issue '{title}': {e}")
+                        raise get_exception_for_github_error(e, f"Failed to create issue '{title}'")
 
             # Report final statistics
-            print(f"\n📊 Deduplication Summary:")
-            print(f"   - Proposed: {len(issues_to_create)}")
-            print(f"   - Duplicates filtered: {len(duplicates)}")
-            print(f"   - Created: {created_count}")
-            if len(issues_to_create) > 0:
-                print(f"   - Spam reduction: {(len(duplicates) / len(issues_to_create) * 100):.1f}%")
-            
+            logger.info("Deduplication Summary", extra={
+                "proposed": len(issues_to_create),
+                "duplicates_filtered": len(duplicates),
+                "created": created_count,
+                "spam_reduction_pct": (len(duplicates) / len(issues_to_create) * 100) if len(issues_to_create) > 0 else 0
+            })
+
             if self.dry_mode:
-                print(f"🎉 DRY MODE: Would have generated {created_count} unique issue(s)")
+                logger.info(f"DRY MODE: Would have generated {created_count} unique issue(s)")
             else:
-                print(f"🎉 Successfully generated {created_count} issue(s)")
+                logger.info(f"Successfully generated {created_count} issue(s)")
 
-        except json.JSONDecodeError as e:
-            print(f"❌ Failed to parse Claude response as JSON: {e}")
-            print(f"Response (first 1000 chars): {response_text[:1000]}")
-            print(f"Response (last 500 chars): {response_text[-500:]}")
-            sys.exit(1)
+        except JSONParseError:
+            logger.error("Failed to parse Claude response as JSON", extra={
+                "response_preview": response_text[:1000],
+                "response_end": response_text[-500:]
+            })
+            raise
         except Exception as e:
-            print(f"❌ Error creating issues: {e}")
-            import traceback
-
-            traceback.print_exc()
-            sys.exit(1)
+            logger.exception("Error creating issues")
+            raise

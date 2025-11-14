@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
+from logging_config import get_logger
+from utils.exceptions import (
+    FileNotFoundError as AutoGrowFileNotFoundError,
+    FileReadError,
+    ProjectBriefValidationError,
+    ValidationError,
+)
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class ValidationResult:
@@ -116,7 +126,16 @@ class ProjectBriefValidator:
         # Read file content
         try:
             content = self.project_brief_path.read_text(encoding="utf-8")
-        except Exception as e:
+        except UnicodeDecodeError as e:
+            logger.error(f"Failed to decode PROJECT_BRIEF.md with UTF-8 encoding: {e}")
+            result.add_error(f"Failed to read PROJECT_BRIEF.md: Invalid UTF-8 encoding")
+            return result
+        except PermissionError as e:
+            logger.error(f"Permission denied when reading PROJECT_BRIEF.md: {e}")
+            result.add_error(f"Failed to read PROJECT_BRIEF.md: Permission denied")
+            return result
+        except OSError as e:
+            logger.error(f"OS error reading PROJECT_BRIEF.md: {e}")
             result.add_error(f"Failed to read PROJECT_BRIEF.md: {e}")
             return result
 
@@ -372,11 +391,16 @@ def validate_or_exit(project_brief_path: Optional[Path] = None) -> None:
     """
     result = validate_project_brief(project_brief_path)
 
-    print(result.get_summary())
+    summary = result.get_summary()
+
+    if result.is_valid:
+        logger.info(summary)
+    else:
+        logger.error(summary)
 
     if not result.is_valid:
-        print("\n⚠️  Please fix the errors before running AI generation.")
+        logger.warning("Please fix the errors before running AI generation.")
         raise SystemExit(1)
 
     if result.warnings:
-        print("\n⚠️  Consider addressing the warnings for better AI generation results.")
+        logger.warning("Consider addressing the warnings for better AI generation results.")

@@ -15,9 +15,14 @@ import git
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-# Import core agent and retry utilities
+# Import core agent, retry utilities, and exceptions
 from agents.issue_resolver import IssueResolver
 from utils.retry import retry_github_api
+from utils.exceptions import MissingEnvironmentVariableError, get_exception_for_github_error
+from logging_config import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Configuration from environment
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -30,8 +35,11 @@ MAX_TIME = int(os.getenv('MAX_EXECUTION_TIME', '8')) * 60
 DRY_MODE = os.getenv('DRY_MODE', 'false').lower() in ('true', '1', 'yes')
 
 if not GITHUB_TOKEN or not REPO_NAME:
-    print("❌ Missing required environment variables: GITHUB_TOKEN, REPO_NAME")
-    sys.exit(1)
+    logger.error("Missing required environment variables", extra={
+        "has_github_token": bool(GITHUB_TOKEN),
+        "has_repo_name": bool(REPO_NAME)
+    })
+    raise MissingEnvironmentVariableError("GITHUB_TOKEN or REPO_NAME")
 
 # Initialize GitHub client with retry
 @retry_github_api
@@ -40,8 +48,12 @@ def initialize_github():
     gh = Github(auth=auth)
     return gh.get_repo(REPO_NAME)
 
-repo = initialize_github()
-print(f"✅ Connected to repository: {REPO_NAME}")
+try:
+    repo = initialize_github()
+    logger.info(f"Connected to repository: {REPO_NAME}")
+except Exception as e:
+    logger.error(f"Failed to connect to GitHub repository: {REPO_NAME}")
+    raise get_exception_for_github_error(e, f"Failed to connect to repository {REPO_NAME}")
 
 git_repo = git.Repo('.')
 
@@ -56,12 +68,11 @@ try:
         max_time=MAX_TIME,
         dry_mode=DRY_MODE
     )
-    
+
     specific_issue_num = int(SPECIFIC_ISSUE) if SPECIFIC_ISSUE else None
     agent.resolve_issue(specific_issue=specific_issue_num)
-    
+    logger.info("Issue resolver completed successfully")
+
 except Exception as e:
-    print(f"❌ Fatal error: {e}")
-    import traceback
-    traceback.print_exc()
+    logger.exception("Fatal error in issue resolver")
     sys.exit(1)

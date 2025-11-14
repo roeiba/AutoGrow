@@ -14,8 +14,17 @@ import sys
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src" / "gemini-agent"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from gemini_agent import GeminiAgent
+from utils.exceptions import (
+    AgentError,
+    AgentResponseError,
+    JSONParseError,
+    MissingEnvironmentVariableError,
+    ConfigurationError,
+    FileOperationError,
+)
 
 
 class TestGeminiAgentInitialization:
@@ -41,7 +50,7 @@ class TestGeminiAgentInitialization:
         """Test initialization fails without API key"""
         with patch.dict(os.environ, {}, clear=True):
             with patch.object(GeminiAgent, "_is_gemini_installed", return_value=True):
-                with pytest.raises(RuntimeError, match="GEMINI_API_KEY not found"):
+                with pytest.raises(MissingEnvironmentVariableError):
                     GeminiAgent()
 
     def test_init_custom_model(self):
@@ -65,7 +74,7 @@ class TestGeminiAgentInitialization:
     def test_init_gemini_not_installed(self):
         """Test initialization fails when gemini-cli not installed"""
         with patch.object(GeminiAgent, "_is_gemini_installed", return_value=False):
-            with pytest.raises(RuntimeError, match="Gemini CLI is not installed"):
+            with pytest.raises(ConfigurationError, match="Gemini CLI is not installed"):
                 GeminiAgent(api_key="test-key")
 
 
@@ -199,7 +208,7 @@ class TestGeminiAgentQuery:
             1, "gemini", stderr="API error"
         )
 
-        with pytest.raises(RuntimeError, match="Gemini CLI error"):
+        with pytest.raises(AgentError, match="Gemini CLI"):
             agent.query("Test prompt")
 
     @patch("subprocess.run")
@@ -207,7 +216,7 @@ class TestGeminiAgentQuery:
         """Test query handles JSON decode errors"""
         mock_run.return_value = Mock(stdout="Invalid JSON {", returncode=0)
 
-        with pytest.raises(RuntimeError, match="Failed to parse JSON"):
+        with pytest.raises(JSONParseError, match="Failed to parse JSON"):
             agent.query("Test prompt")
 
     @patch("subprocess.run")
@@ -255,7 +264,7 @@ class TestGeminiAgentQueryWithFile:
 
     def test_query_with_file_not_found(self, agent):
         """Test query with non-existent file"""
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileOperationError):
             agent.query_with_file("Analyze", "/nonexistent/file.py")
 
     @patch("subprocess.run")

@@ -14,8 +14,16 @@ import sys
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src" / "claude-agent"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from claude_cli_agent import ClaudeAgent
+from utils.exceptions import (
+    AgentError,
+    AgentResponseError,
+    JSONParseError,
+    FileNotFoundError as CustomFileNotFoundError,
+    FileOperationError,
+)
 
 
 class TestClaudeAgentInitialization:
@@ -61,7 +69,7 @@ class TestClaudeAgentInitialization:
     def test_init_claude_not_installed(self):
         """Test initialization fails when claude CLI not installed"""
         with patch.object(ClaudeAgent, "_is_claude_installed", return_value=False):
-            with pytest.raises(RuntimeError, match="Claude Code CLI is not installed"):
+            with pytest.raises(AgentError, match="Claude Code CLI is not installed"):
                 ClaudeAgent()
 
 
@@ -224,7 +232,7 @@ class TestClaudeAgentQuery:
             1, "claude", stderr="API error"
         )
 
-        with pytest.raises(RuntimeError, match="Claude CLI error"):
+        with pytest.raises(AgentError, match="Claude CLI"):
             agent.query("Test prompt")
 
     @patch("subprocess.run")
@@ -232,7 +240,7 @@ class TestClaudeAgentQuery:
         """Test query handles JSON decode errors"""
         mock_run.return_value = Mock(stdout="Invalid JSON {", returncode=0)
 
-        with pytest.raises(RuntimeError, match="Failed to parse JSON"):
+        with pytest.raises(JSONParseError, match="Failed to parse JSON"):
             agent.query("Test prompt")
 
 
@@ -347,7 +355,7 @@ class TestClaudeAgentCodeReview:
 
     def test_code_review_file_not_found(self, agent):
         """Test code review with non-existent file"""
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(CustomFileNotFoundError):
             agent.code_review("/nonexistent/file.py")
 
 

@@ -21,6 +21,24 @@ from utils.project_brief_validator import validate_project_brief
 from utils.retry import retry_anthropic_api, retry_github_api
 from prompt_loader import PromptLoader
 from models_config import CLAUDE_MODELS
+from utils.exceptions import (
+    GitHubAPIError,
+    GitError,
+    BranchError,
+    CommitError,
+    PushError,
+    ValidationError,
+    ProjectBriefValidationError,
+    IssueError,
+    IssueNotFoundError,
+    PRCreationError,
+    AnthropicAPIError,
+    AgentResponseError,
+    JSONParseError,
+    FileOperationError,
+    get_exception_for_github_error,
+    get_exception_for_anthropic_error,
+)
 
 
 class AgenticWorkflow:
@@ -57,7 +75,7 @@ class AgenticWorkflow:
 
         parts = path.split("/")
         if len(parts) != 2:
-            raise ValueError(f"Invalid repository URL: {self.config.repo_url}")
+            raise ValidationError(f"Invalid repository URL: {self.config.repo_url}")
 
         return parts[0], parts[1]
 
@@ -68,8 +86,11 @@ class AgenticWorkflow:
         # Use token for authentication
         auth_url = f"https://x-access-token:{self.config.github_token}@github.com/{owner}/{repo_name}.git"
 
-        git.Repo.clone_from(auth_url, self.repo_path)
-        self.logger.info(f"Repository cloned to {self.repo_path}")
+        try:
+            git.Repo.clone_from(auth_url, self.repo_path)
+            self.logger.info(f"Repository cloned to {self.repo_path}")
+        except git.GitCommandError as e:
+            raise GitError(f"Failed to clone repository: {e}")
 
     def _get_issue(self, owner: str, repo_name: str) -> Optional[Dict[str, Any]]:
         """Get issue details from GitHub"""
@@ -117,20 +138,24 @@ class AgenticWorkflow:
             }
 
         except GithubException as e:
-            self.logger.error(f"Error fetching issue: {e}")
-            raise
+            exception = get_exception_for_github_error(e, "Error fetching issue")
+            self.logger.error(f"Error fetching issue: {exception}")
+            raise exception
 
     def _create_branch(self, issue_number: int) -> str:
         """Create a new branch for the fix"""
-        repo = git.Repo(self.repo_path)
+        try:
+            repo = git.Repo(self.repo_path)
 
-        branch_name = f"fix/issue-{issue_number}-{int(datetime.now().timestamp())}"
+            branch_name = f"fix/issue-{issue_number}-{int(datetime.now().timestamp())}"
 
-        # Create and checkout new branch
-        repo.git.checkout("-b", branch_name)
-        self.logger.info(f"Created branch: {branch_name}")
+            # Create and checkout new branch
+            repo.git.checkout("-b", branch_name)
+            self.logger.info(f"Created branch: {branch_name}")
 
-        return branch_name
+            return branch_name
+        except git.GitCommandError as e:
+            raise BranchError(f"Failed to create branch: {e}")
 
     def _analyze_codebase(self) -> Dict[str, Any]:
         """Analyze the codebase structure"""
@@ -209,8 +234,11 @@ class AgenticWorkflow:
         except FileNotFoundError as e:
             self.logger.error(f"Prompt template not found: {e}")
             self.logger.info("Falling back to default template")
-            template = self.prompt_loader.load_template("default")
-            prompt = self.prompt_loader.format_prompt(template, context)
+            try:
+                template = self.prompt_loader.load_template("default")
+                prompt = self.prompt_loader.format_prompt(template, context)
+            except FileNotFoundError:
+                raise FileOperationError(f"Default prompt template not found")
 
         try:
             # Use retry decorator for Anthropic API call
@@ -229,8 +257,9 @@ class AgenticWorkflow:
             return response_text
 
         except Exception as e:
-            self.logger.error(f"Error calling Claude API: {e}")
-            raise
+            exception = get_exception_for_anthropic_error(e, "Error calling Claude API")
+            self.logger.error(f"Error calling Claude API: {exception}")
+            raise exception
 
     def _apply_fix(self, fix_response: str) -> bool:
         """Apply the fix suggested by Claude"""
@@ -244,17 +273,20 @@ class AgenticWorkflow:
 
             files_modified = []
             for file_change in fix_data.get("files_to_modify", []):
-                file_path = self.repo_path / file_change["path"]
+                try:
+                    file_path = self.repo_path / file_change["path"]
 
-                # Create parent directories if needed
-                file_path.parent.mkdir(parents=True, exist_ok=True)
+                    # Create parent directories if needed
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Write the code
-                with open(file_path, "w") as f:
-                    f.write(file_change["code"])
+                    # Write the code
+                    with open(file_path, "w") as f:
+                        f.write(file_change["code"])
 
-                files_modified.append(file_change["path"])
-                self.logger.info(f"Modified: {file_change['path']}")
+                    files_modified.append(file_change["path"])
+                    self.logger.info(f"Modified: {file_change['path']}")
+                except (IOError, OSError) as e:
+                    raise FileOperationError(f"Failed to write file {file_change['path']}: {e}")
 
             if not files_modified:
                 self.logger.info("No files were modified")
@@ -262,52 +294,66 @@ class AgenticWorkflow:
 
             return True
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             # If not JSON, treat as general guidance and create a placeholder
             self.logger.info(
                 "Response was not JSON, creating documentation of suggested fix"
             )
 
-            fix_doc_path = self.repo_path / "CLAUDE_FIX_SUGGESTION.md"
-            with open(fix_doc_path, "w") as f:
-                f.write(f"# Fix Suggestion from Claude AI\n\n")
-                f.write(f"Generated: {datetime.now().isoformat()}\n\n")
-                f.write(fix_response)
+            try:
+                fix_doc_path = self.repo_path / "CLAUDE_FIX_SUGGESTION.md"
+                with open(fix_doc_path, "w") as f:
+                    f.write(f"# Fix Suggestion from Claude AI\n\n")
+                    f.write(f"Generated: {datetime.now().isoformat()}\n\n")
+                    f.write(fix_response)
 
-            self.logger.info(f"Fix suggestion saved to {fix_doc_path}")
-            return True
+                self.logger.info(f"Fix suggestion saved to {fix_doc_path}")
+                return True
+            except (IOError, OSError) as io_error:
+                raise FileOperationError(f"Failed to write fix suggestion file: {io_error}")
 
     def _commit_and_push(self, issue: Dict[str, Any], branch_name: str):
         """Commit changes and push to GitHub"""
         self.logger.info("Committing and pushing changes...")
 
-        repo = git.Repo(self.repo_path)
+        try:
+            repo = git.Repo(self.repo_path)
 
-        # Stage all changes
-        repo.git.add("-A")
+            # Stage all changes
+            repo.git.add("-A")
 
-        # Check if there are changes
-        if not repo.is_dirty() and not repo.untracked_files:
-            self.logger.info("No changes to commit")
-            return False
+            # Check if there are changes
+            if not repo.is_dirty() and not repo.untracked_files:
+                self.logger.info("No changes to commit")
+                return False
 
-        # Create commit
-        commit_message = f"""Fix: Resolve issue #{issue['number']} - {issue['title']}
+            # Create commit
+            commit_message = f"""Fix: Resolve issue #{issue['number']} - {issue['title']}
 
 Automated fix generated by Claude Agent.
 
 Closes #{issue['number']}
 """
 
-        repo.index.commit(commit_message)
-        self.logger.info("Changes committed")
+            try:
+                repo.index.commit(commit_message)
+                self.logger.info("Changes committed")
+            except git.GitCommandError as e:
+                raise CommitError(f"Failed to commit changes: {e}")
 
-        # Push to remote
-        origin = repo.remote("origin")
-        origin.push(branch_name)
-        self.logger.info(f"Pushed branch: {branch_name}")
+            # Push to remote
+            try:
+                origin = repo.remote("origin")
+                origin.push(branch_name)
+                self.logger.info(f"Pushed branch: {branch_name}")
+            except git.GitCommandError as e:
+                raise PushError(f"Failed to push branch {branch_name}: {e}")
 
-        return True
+            return True
+        except git.GitError as e:
+            if isinstance(e, (CommitError, PushError)):
+                raise
+            raise GitError(f"Git operation failed: {e}")
 
     def _create_pull_request(
         self, owner: str, repo_name: str, issue: Dict[str, Any], branch_name: str
@@ -355,8 +401,9 @@ Closes #{issue['number']}
             return pr
 
         except GithubException as e:
-            self.logger.error(f"Error creating pull request: {e}")
-            raise
+            exception = get_exception_for_github_error(e, "Error creating pull request")
+            self.logger.error(f"Error creating pull request: {exception}")
+            raise PRCreationError(f"Failed to create pull request: {exception}")
 
     def _validate_project_brief(self) -> bool:
         """
@@ -364,6 +411,9 @@ Closes #{issue['number']}
 
         Returns:
             True if valid or not found (not required), False if invalid
+
+        Raises:
+            ProjectBriefValidationError: If validation fails with errors
         """
         project_brief_path = self.repo_path / "PROJECT_BRIEF.md"
 
@@ -373,25 +423,29 @@ Closes #{issue['number']}
             return True
 
         self.logger.info("Validating PROJECT_BRIEF.md...")
-        result = validate_project_brief(project_brief_path)
 
-        if result.is_valid:
-            self.logger.info("✅ PROJECT_BRIEF.md validation passed")
-            if result.warnings:
-                self.logger.warning(f"Validation warnings ({len(result.warnings)}):")
-                for warning in result.warnings:
-                    self.logger.warning(f"  - {warning}")
-        else:
-            self.logger.error("❌ PROJECT_BRIEF.md validation failed")
-            for error in result.errors:
-                self.logger.error(f"  - {error}")
+        try:
+            result = validate_project_brief(project_brief_path)
 
-            if result.warnings:
-                self.logger.warning("Additional warnings:")
-                for warning in result.warnings:
-                    self.logger.warning(f"  - {warning}")
+            if result.is_valid:
+                self.logger.info("PROJECT_BRIEF.md validation passed")
+                if result.warnings:
+                    self.logger.warning(f"Validation warnings ({len(result.warnings)}):")
+                    for warning in result.warnings:
+                        self.logger.warning(f"  - {warning}")
+            else:
+                self.logger.error("PROJECT_BRIEF.md validation failed")
+                for error in result.errors:
+                    self.logger.error(f"  - {error}")
 
-        return result.is_valid
+                if result.warnings:
+                    self.logger.warning("Additional warnings:")
+                    for warning in result.warnings:
+                        self.logger.warning(f"  - {warning}")
+
+            return result.is_valid
+        except Exception as e:
+            raise ValidationError(f"Failed to validate PROJECT_BRIEF.md: {e}")
 
     def run(self):
         """Execute the complete workflow"""
@@ -410,7 +464,7 @@ Closes #{issue['number']}
             # Validate PROJECT_BRIEF.md if it exists
             if not self._validate_project_brief():
                 self.logger.error(
-                    "\n⚠️  PROJECT_BRIEF.md validation failed. Fix errors before proceeding."
+                    "\nPROJECT_BRIEF.md validation failed. Fix errors before proceeding."
                 )
                 return 1
 
@@ -454,8 +508,30 @@ Closes #{issue['number']}
 
             return 0
 
+        except ValidationError as e:
+            self.logger.error(f"\nValidation error: {e}")
+            return 1
+        except GitError as e:
+            self.logger.error(f"\nGit error: {e}")
+            return 1
+        except GitHubAPIError as e:
+            self.logger.error(f"\nGitHub API error: {e}")
+            if e.status_code:
+                self.logger.error(f"Status code: {e.status_code}")
+            return 1
+        except AnthropicAPIError as e:
+            self.logger.error(f"\nAnthropic API error: {e}")
+            if e.status_code:
+                self.logger.error(f"Status code: {e.status_code}")
+            return 1
+        except FileOperationError as e:
+            self.logger.error(f"\nFile operation error: {e}")
+            return 1
+        except PRCreationError as e:
+            self.logger.error(f"\nPR creation error: {e}")
+            return 1
         except Exception as e:
-            self.logger.error(f"\nError during workflow execution: {e}")
+            self.logger.error(f"\nUnexpected error during workflow execution: {e}")
             import traceback
 
             traceback.print_exc()

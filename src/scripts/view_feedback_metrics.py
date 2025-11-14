@@ -17,6 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.outcome_tracker import OutcomeTracker
 from utils.feedback_analyzer import FeedbackAnalyzer
+from logging_config import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 def main():
@@ -54,9 +58,11 @@ def main():
 
     if args.export:
         # Export as JSON
+        logger.info("Exporting metrics as JSON")
         print(tracker.export_metrics_json())
     elif args.recent:
         # Show recent outcomes only
+        logger.info(f"Displaying recent outcomes (limit: {args.limit})")
         print("="*80)
         print(f"📊 RECENT OUTCOMES (Last {args.limit})")
         print("="*80)
@@ -65,6 +71,7 @@ def main():
         recent = tracker.get_recent_outcomes(limit=args.limit)
 
         if not recent:
+            logger.warning("No outcome data available")
             print("No outcome data available yet.")
             return
 
@@ -98,6 +105,7 @@ def main():
             print()
     else:
         # Show comprehensive report
+        logger.info(f"Generating comprehensive report for last {args.days} days")
         report = analyzer.format_metrics_report(days=args.days)
         print(report)
 

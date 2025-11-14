@@ -32,8 +32,15 @@ from tenacity import (
 from tenacity.wait import wait_base
 from tenacity.stop import stop_base
 
+from logging_config import get_logger
+from utils.exceptions import (
+    RateLimitError as AutoGrowRateLimitError,
+    RetryExhaustedError,
+    TimeoutError as AutoGrowTimeoutError,
+)
+
 # Get logger
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RetryConfig:
@@ -144,7 +151,9 @@ def classify_anthropic_exception(e: Exception) -> Exception:
                 try:
                     retry_after = int(retry_after)
                 except (ValueError, TypeError):
+                    logger.warning(f"Could not parse retry-after value: {retry_after}")
                     retry_after = None
+        logger.warning(f"Rate limit detected for Anthropic API, retry_after: {retry_after}")
         return RateLimitError(retry_after=retry_after)
 
     # Check for network errors
@@ -152,6 +161,7 @@ def classify_anthropic_exception(e: Exception) -> Exception:
         indicator in error_msg
         for indicator in ["connection", "timeout", "network", "503", "502"]
     ):
+        logger.warning(f"Network error detected for Anthropic API: {error_msg[:100]}")
         return NetworkError(str(e))
 
     # Return original exception
@@ -179,6 +189,7 @@ def classify_github_exception(e: Exception) -> Exception:
             # GitHub rate limit info may be in exception data
             if "retry-after" in e.data:
                 retry_after = e.data["retry-after"]
+        logger.warning(f"Rate limit detected for GitHub API, retry_after: {retry_after}")
         return RateLimitError(retry_after=retry_after)
 
     # Check for network errors
@@ -186,6 +197,7 @@ def classify_github_exception(e: Exception) -> Exception:
         indicator in error_msg
         for indicator in ["connection", "timeout", "network", "503", "502", "500"]
     ):
+        logger.warning(f"Network error detected for GitHub API: {error_msg[:100]}")
         return NetworkError(str(e))
 
     # Return original exception
@@ -324,6 +336,15 @@ def retry_anthropic_api(func: Callable) -> Callable:
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except RetryableError:
+            # Already classified, just re-raise
+            raise
+        except ConnectionError as e:
+            logger.warning(f"Connection error in Anthropic API call: {e}")
+            raise
+        except TimeoutError as e:
+            logger.error(f"Timeout in Anthropic API call: {e}")
+            raise
         except Exception as e:
             # Classify and re-raise with appropriate type
             classified = classify_anthropic_exception(e)
@@ -331,7 +352,9 @@ def retry_anthropic_api(func: Callable) -> Callable:
                 raise classified from e
             # Check if this is a retryable error
             if should_retry_exception(e):
+                logger.debug(f"Retryable error detected: {str(e)[:100]}")
                 raise TryAgain from e
+            logger.error(f"Non-retryable error in Anthropic API call: {str(e)[:100]}")
             raise
 
     return wrapper
@@ -379,6 +402,15 @@ def retry_github_api(func: Callable) -> Callable:
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except RetryableError:
+            # Already classified, just re-raise
+            raise
+        except ConnectionError as e:
+            logger.warning(f"Connection error in GitHub API call: {e}")
+            raise
+        except TimeoutError as e:
+            logger.error(f"Timeout in GitHub API call: {e}")
+            raise
         except Exception as e:
             # Classify and re-raise with appropriate type
             classified = classify_github_exception(e)
@@ -386,7 +418,9 @@ def retry_github_api(func: Callable) -> Callable:
                 raise classified from e
             # Check if this is a retryable error
             if should_retry_exception(e):
+                logger.debug(f"Retryable error detected: {str(e)[:100]}")
                 raise TryAgain from e
+            logger.error(f"Non-retryable error in GitHub API call: {str(e)[:100]}")
             raise
 
     return wrapper

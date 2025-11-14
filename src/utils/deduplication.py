@@ -13,6 +13,14 @@ import re
 from typing import List, Dict, Tuple, Any
 from difflib import SequenceMatcher
 
+from logging_config import get_logger
+from utils.exceptions import (
+    DuplicateIssueError,
+    ValidationError,
+)
+
+logger = get_logger(__name__)
+
 
 class IssueDuplicateChecker:
     """Checks for duplicate or similar issues using multiple similarity metrics"""
@@ -243,8 +251,15 @@ class IssueDuplicateChecker:
                 best_match, best_scores = duplicate_matches[0]
                 duplicates_found.append((new_issue, best_match, best_scores))
 
+                logger.info(
+                    f"Duplicate detected - New: '{new_title[:60]}' matches "
+                    f"Existing #{best_match.number}: '{best_match.title[:60]}' "
+                    f"(Title: {best_scores['title_similarity']:.2%}, "
+                    f"Combined: {best_scores['combined_similarity']:.2%})"
+                )
+
                 if verbose:
-                    print(f"🚫 DUPLICATE DETECTED:")
+                    print(f"DUPLICATE DETECTED:")
                     print(f"   New: {new_title[:60]}")
                     print(f"   Existing #{best_match.number}: {best_match.title[:60]}")
                     print(f"   Title similarity: {best_scores['title_similarity']:.2%}")
@@ -252,7 +267,8 @@ class IssueDuplicateChecker:
             else:
                 # Not a duplicate
                 non_duplicates.append(new_issue)
+                logger.debug(f"Unique issue detected: {new_title[:60]}")
                 if verbose:
-                    print(f"✅ UNIQUE: {new_title[:60]}")
+                    print(f"UNIQUE: {new_title[:60]}")
 
         return non_duplicates, duplicates_found

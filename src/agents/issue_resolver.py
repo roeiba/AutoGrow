@@ -16,13 +16,35 @@ import git
 sys.path.insert(0, str(Path(__file__).parent.parent / "claude-agent"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Import logging
+from logging_config import get_logger
+
+# Import exception classes
+from utils.exceptions import (
+    GitHubAPIError,
+    AnthropicAPIError,
+    RateLimitError,
+    AuthenticationError,
+    BranchError,
+    PushError,
+    PRCreationError,
+    AgentError,
+    AgentResponseError,
+    ValidationError,
+    get_exception_for_github_error,
+    get_exception_for_anthropic_error,
+)
+
+# Initialize logger
+logger = get_logger(__name__)
+
 # Import Claude CLI Agent
 try:
     from claude_cli_agent import ClaudeAgent
 
     USE_CLAUDE_CLI = True
 except ImportError:
-    print("⚠️  claude_cli_agent not available, falling back to anthropic SDK")
+    logger.warning("claude_cli_agent not available, falling back to anthropic SDK")
     from anthropic import Anthropic
 
     USE_CLAUDE_CLI = False
@@ -70,15 +92,10 @@ class IssueResolver:
         # Initialize outcome tracker for feedback loop
         self.outcome_tracker = OutcomeTracker()
 
-        print("🤖 Issue Resolver Agent Initialized")
-        print(f"📋 Config:")
-        print(f"   - Labels to handle: {self.labels_to_handle}")
-        print(f"   - Labels to skip: {self.labels_to_skip}")
-        print(f"   - Dry mode: {self.dry_mode}")
-        print(f"   - Outcome tracking: enabled")
-        print(
-            f"   - Supports: features, bugs, documentation, refactoring, tests, performance, security, CI/CD"
-        )
+        logger.info("Issue Resolver Agent Initialized")
+        logger.info(f"Config: labels_to_handle={self.labels_to_handle}, labels_to_skip={self.labels_to_skip}")
+        logger.info(f"Config: dry_mode={self.dry_mode}, outcome_tracking=enabled")
+        logger.info("Supports: features, bugs, documentation, refactoring, tests, performance, security, CI/CD")
 
     def resolve_issue(self, specific_issue: Optional[int] = None) -> bool:
         """
@@ -90,23 +107,22 @@ class IssueResolver:
         Returns:
             bool: True if issue was resolved, False otherwise
         """
-        print("\n" + "="*80)
-        print("🚀 STARTING ISSUE RESOLUTION WORKFLOW")
-        print("="*80)
-        
+        logger.info("=" * 80)
+        logger.info("STARTING ISSUE RESOLUTION WORKFLOW")
+        logger.info("=" * 80)
+
         # Select issue
         selected_issue = self._select_issue(specific_issue)
 
         if not selected_issue:
-            print("\n❌ WORKFLOW ABORTED: No suitable issues found")
-            print("="*80 + "\n")
+            logger.warning("WORKFLOW ABORTED: No suitable issues found")
+            logger.info("=" * 80)
             return False
 
-        print(f"\n✅ ISSUE SELECTED")
-        print(f"   Issue: #{selected_issue.number}")
-        print(f"   Title: {selected_issue.title}")
-        print(f"   Labels: {[label.name for label in selected_issue.labels]}")
-        print(f"   Created: {selected_issue.created_at}")
+        logger.info(f"ISSUE SELECTED: #{selected_issue.number}")
+        logger.info(f"Title: {selected_issue.title}")
+        logger.info(f"Labels: {[label.name for label in selected_issue.labels]}")
+        logger.info(f"Created: {selected_issue.created_at}")
 
         # Record attempt in outcome tracker
         issue_labels = [label.name for label in selected_issue.labels]
@@ -117,7 +133,7 @@ class IssueResolver:
                 labels=issue_labels,
                 status=ResolutionStatus.PENDING
             )
-            print(f"   📊 Outcome tracking: Recorded attempt")
+            logger.debug("Outcome tracking: Recorded attempt")
 
         # Claim the issue
         issue_claimed = self._claim_issue(selected_issue)
@@ -134,23 +150,31 @@ class IssueResolver:
         )
 
         if not is_valid:
-            print("❌ PROJECT_BRIEF.md validation failed - aborting to save API calls")
+            logger.error("PROJECT_BRIEF.md validation failed - aborting to save API calls")
             if not self.dry_mode:
-                selected_issue.create_comment(
-                    f"❌ **Pre-flight check failed**\n\n{validation_msg}\n\n"
-                    "Please fix PROJECT_BRIEF.md validation errors before I can proceed.\n\n"
-                    "---\n*Issue Resolver Agent*"
-                )
+                try:
+                    selected_issue.create_comment(
+                        f"**Pre-flight check failed**\n\n{validation_msg}\n\n"
+                        "Please fix PROJECT_BRIEF.md validation errors before I can proceed.\n\n"
+                        "---\n*Issue Resolver Agent*"
+                    )
+                except Exception as e:
+                    github_error = get_exception_for_github_error(e, "Failed to post validation failure comment")
+                    logger.exception(f"Failed to post validation failure comment: {github_error}")
             else:
-                print("   🔍 DRY MODE: Would post validation failure comment")
+                logger.debug("DRY MODE: Would post validation failure comment")
             return False
 
         # Add validation success to issue comment if there was a validation
         if validation_msg:
             if not self.dry_mode:
-                selected_issue.create_comment(validation_msg)
+                try:
+                    selected_issue.create_comment(validation_msg)
+                except Exception as e:
+                    github_error = get_exception_for_github_error(e, "Failed to post validation success comment")
+                    logger.exception(f"Failed to post validation success comment: {github_error}")
             else:
-                print("   🔍 DRY MODE: Would post validation success comment")
+                logger.debug("DRY MODE: Would post validation success comment")
 
         # Create branch
         branch_name = f"fix/issue-{selected_issue.number}-{int(time.time())}"
@@ -162,16 +186,20 @@ class IssueResolver:
 
         if summary is None:
             if issue_claimed and not self.dry_mode:
-                selected_issue.create_comment("❌ Failed to generate fix")
+                try:
+                    selected_issue.create_comment("Failed to generate fix")
+                except Exception as e:
+                    github_error = get_exception_for_github_error(e, "Failed to post fix generation failure comment")
+                    logger.exception(f"Failed to post fix generation failure comment: {github_error}")
                 # Track failure
                 self.outcome_tracker.update_status(
                     issue_number=selected_issue.number,
                     status=ResolutionStatus.FAILED,
                     error_message="Failed to generate fix with Claude AI"
                 )
-                print("   📊 Outcome tracking: Marked as FAILED")
+                logger.debug("Outcome tracking: Marked as FAILED")
             elif issue_claimed:
-                print("   🔍 DRY MODE: Would post fix generation failure comment")
+                logger.debug("DRY MODE: Would post fix generation failure comment")
             return False
 
         # Check if files were modified and create PR
@@ -179,28 +207,28 @@ class IssueResolver:
 
     def _select_issue(self, specific_issue: Optional[int]) -> Optional[object]:
         """Select an issue to work on"""
-        print("\n" + "-"*80)
-        print("📋 STEP 1: ISSUE SELECTION")
-        print("-"*80)
+        logger.info("-" * 80)
+        logger.info("STEP 1: ISSUE SELECTION")
+        logger.info("-" * 80)
 
         if specific_issue:
-            print(f"🎯 Mode: Specific issue requested")
-            print(f"   Issue number: #{specific_issue}")
+            logger.info(f"Mode: Specific issue requested (#{specific_issue})")
 
             @retry_github_api
             def get_issue():
                 return self.repo.get_issue(int(specific_issue))
 
-            issue = get_issue()
-            print(f"   ✅ Found issue: {issue.title}")
-            return issue
+            try:
+                issue = get_issue()
+                logger.info(f"Found issue: {issue.title}")
+                return issue
+            except Exception as e:
+                github_error = get_exception_for_github_error(e, f"Failed to get issue #{specific_issue}")
+                logger.exception(f"Failed to get issue #{specific_issue}: {github_error}")
+                raise github_error
 
-        print(f"🔍 Mode: Searching for suitable issue")
-        print(f"   Criteria:")
-        print(f"   - State: open")
-        print(f"   - Must have labels: {self.labels_to_handle}")
-        print(f"   - Must NOT have labels: {self.labels_to_skip}")
-        print(f"   - Not already claimed by agent")
+        logger.info("Mode: Searching for suitable issue")
+        logger.info(f"Criteria: state=open, labels_to_handle={self.labels_to_handle}, labels_to_skip={self.labels_to_skip}")
 
         @retry_github_api
         def get_open_issues():
@@ -208,54 +236,64 @@ class IssueResolver:
                 state="open", sort="created", direction="asc"
             )
 
-        open_issues = get_open_issues()
+        try:
+            open_issues = get_open_issues()
+        except Exception as e:
+            github_error = get_exception_for_github_error(e, "Failed to get open issues")
+            logger.exception(f"Failed to get open issues: {github_error}")
+            raise github_error
 
         issues_checked = 0
         for issue in open_issues:
             issues_checked += 1
-            
+
             if issue.pull_request:
-                print(f"   ⏭️  Skipping #{issue.number}: Is a pull request")
+                logger.debug(f"Skipping #{issue.number}: Is a pull request")
                 continue
 
             issue_labels = [label.name for label in issue.labels]
-            
+
             if any(skip_label in issue_labels for skip_label in self.labels_to_skip):
                 skip_label_found = [l for l in issue_labels if l in self.labels_to_skip]
-                print(f"   ⏭️  Skipping #{issue.number}: Has skip label {skip_label_found}")
+                logger.debug(f"Skipping #{issue.number}: Has skip label {skip_label_found}")
                 continue
 
             if self.labels_to_handle and not any(
                 handle_label in issue_labels for handle_label in self.labels_to_handle
             ):
-                print(f"   ⏭️  Skipping #{issue.number}: No matching labels (has: {issue_labels})")
+                logger.debug(f"Skipping #{issue.number}: No matching labels (has: {issue_labels})")
                 continue
 
-            comments = list(issue.get_comments())
+            try:
+                comments = list(issue.get_comments())
+            except Exception as e:
+                github_error = get_exception_for_github_error(e, f"Failed to get comments for issue #{issue.number}")
+                logger.warning(f"Failed to get comments for issue #{issue.number}: {github_error}")
+                continue
+
             if any(
                 "Issue Resolver Agent" in c.body and "claimed" in c.body.lower()
                 for c in comments
             ):
-                print(f"   ⏭️  Skipping #{issue.number}: Already claimed by agent")
+                logger.debug(f"Skipping #{issue.number}: Already claimed by agent")
                 continue
 
-            print(f"\n   ✅ SELECTED: Issue #{issue.number}")
-            print(f"      Title: {issue.title}")
-            print(f"      Labels: {issue_labels}")
-            print(f"      Reason: Matches all criteria")
-            print(f"      (Checked {issues_checked} issues total)")
+            logger.info(f"SELECTED: Issue #{issue.number}")
+            logger.info(f"Title: {issue.title}")
+            logger.info(f"Labels: {issue_labels}")
+            logger.info(f"Reason: Matches all criteria (checked {issues_checked} issues total)")
             return issue
 
-        print(f"\n   ❌ No suitable issues found (checked {issues_checked} issues)")
+        logger.warning(f"No suitable issues found (checked {issues_checked} issues)")
         return None
 
     def _claim_issue(self, issue) -> bool:
         """Claim an issue by adding a comment and label"""
-        print("\n" + "-"*80)
-        print("📋 STEP 2: CLAIMING ISSUE")
-        print("-"*80)
+        logger.info("-" * 80)
+        logger.info("STEP 2: CLAIMING ISSUE")
+        logger.info("-" * 80)
 
-        claim_message = f"""🤖 **Issue Resolver Agent**
+        claim_message = f"""**Issue Resolver Agent**
 
 I'm working on this issue now.
 
@@ -266,8 +304,8 @@ I'm working on this issue now.
 *Automated by GitHub Actions*"""
 
         if self.dry_mode:
-            print("   🔍 DRY MODE: Would add 'in-progress' label")
-            print("   🔍 DRY MODE: Would post claim comment to issue")
+            logger.debug("DRY MODE: Would add 'in-progress' label")
+            logger.debug("DRY MODE: Would post claim comment to issue")
             return True
 
         @retry_github_api
@@ -278,10 +316,22 @@ I'm working on this issue now.
         def add_label():
             return issue.add_to_labels("in-progress")
 
-        create_comment()
-        add_label()
-        print("   ✅ Added 'in-progress' label")
-        print("   ✅ Posted claim comment to issue")
+        try:
+            create_comment()
+            logger.info("Posted claim comment to issue")
+        except Exception as e:
+            github_error = get_exception_for_github_error(e, "Failed to post claim comment")
+            logger.exception(f"Failed to post claim comment: {github_error}")
+            raise github_error
+
+        try:
+            add_label()
+            logger.info("Added 'in-progress' label")
+        except Exception as e:
+            github_error = get_exception_for_github_error(e, "Failed to add in-progress label")
+            logger.warning(f"Failed to add in-progress label: {github_error}")
+            # Don't raise here - claiming without label is acceptable
+
         return True
 
     def _should_skip_validation(
@@ -317,46 +367,48 @@ I'm working on this issue now.
         issue_labels: Optional[List[str]] = None,
     ) -> Tuple[bool, Optional[str]]:
         """Validate PROJECT_BRIEF.md if it exists"""
-        print("\n" + "-"*80)
-        print("📋 STEP 3: PROJECT BRIEF VALIDATION")
-        print("-"*80)
-        
+        logger.info("-" * 80)
+        logger.info("STEP 3: PROJECT BRIEF VALIDATION")
+        logger.info("-" * 80)
+
         issue_labels = issue_labels or []
 
         if self._should_skip_validation(issue_title, issue_body, issue_labels):
-            print(
-                "   ℹ️  Skipping validation (issue is about templates/documentation)"
-            )
+            logger.info("Skipping validation (issue is about templates/documentation)")
             return True, None
 
         project_brief_path = Path("PROJECT_BRIEF.md")
 
         if not project_brief_path.exists():
-            print("   ℹ️  No PROJECT_BRIEF.md found (optional)")
+            logger.info("No PROJECT_BRIEF.md found (optional)")
             return True, None
 
-        print("   📋 Validating PROJECT_BRIEF.md...")
-        result = validate_project_brief(project_brief_path)
+        logger.info("Validating PROJECT_BRIEF.md...")
+        try:
+            result = validate_project_brief(project_brief_path)
+        except Exception as e:
+            logger.exception(f"PROJECT_BRIEF.md validation error: {e}")
+            raise ValidationError(f"Failed to validate PROJECT_BRIEF.md: {e}")
 
         if result.is_valid:
-            print("   ✅ PROJECT_BRIEF.md validation passed")
-            validation_msg = "✅ PROJECT_BRIEF.md validated successfully"
+            logger.info("PROJECT_BRIEF.md validation passed")
+            validation_msg = "PROJECT_BRIEF.md validated successfully"
 
             if result.warnings:
-                print(f"   ⚠️  Validation warnings: {len(result.warnings)}")
+                logger.warning(f"Validation warnings: {len(result.warnings)}")
                 for warning in result.warnings[:3]:
-                    print(f"      - {warning}")
+                    logger.warning(f"- {warning}")
                 validation_msg += f"\n\n**Warnings ({len(result.warnings)}):**\n"
                 for warning in result.warnings[:5]:
                     validation_msg += f"- {warning}\n"
 
             return True, validation_msg
         else:
-            print("   ❌ PROJECT_BRIEF.md validation failed")
+            logger.error("PROJECT_BRIEF.md validation failed")
             for error in result.errors[:5]:
-                print(f"      - {error}")
+                logger.error(f"- {error}")
 
-            validation_msg = "❌ PROJECT_BRIEF.md validation failed\n\n**Errors:**\n"
+            validation_msg = "PROJECT_BRIEF.md validation failed\n\n**Errors:**\n"
             for error in result.errors[:5]:
                 validation_msg += f"- {error}\n"
 
@@ -369,48 +421,54 @@ I'm working on this issue now.
 
     def _create_branch(self, branch_name: str, issue, issue_claimed: bool) -> bool:
         """Create a new git branch"""
-        print("\n" + "-"*80)
-        print("📋 STEP 4: BRANCH CREATION")
-        print("-"*80)
-        print(f"   Branch name: {branch_name}")
-        
+        logger.info("-" * 80)
+        logger.info("STEP 4: BRANCH CREATION")
+        logger.info("-" * 80)
+        logger.info(f"Branch name: {branch_name}")
+
         try:
             self.git_repo.git.checkout("-b", branch_name)
-            print(f"   ✅ Branch created successfully")
+            logger.info("Branch created successfully")
             return True
-        except Exception as e:
-            print(f"   ❌ Failed to create branch: {e}")
+        except git.GitCommandError as e:
+            error = BranchError(f"Failed to create branch {branch_name}: {e}")
+            logger.exception(f"Failed to create branch: {error}")
             if issue_claimed and not self.dry_mode:
-                issue.create_comment(f"❌ Failed to create branch: {e}")
+                try:
+                    issue.create_comment(f"Failed to create branch: {error}")
+                except Exception as comment_error:
+                    github_error = get_exception_for_github_error(comment_error, "Failed to post branch creation failure comment")
+                    logger.exception(f"Failed to post branch creation failure comment: {github_error}")
             elif issue_claimed:
-                print("   🔍 DRY MODE: Would post branch creation failure comment")
+                logger.debug("DRY MODE: Would post branch creation failure comment")
             return False
 
     def _generate_fix(
         self, issue, issue_body: str, issue_labels: List[str]
     ) -> Optional[str]:
         """Generate a fix using Claude AI"""
-        print("\n" + "-"*80)
-        print("📋 STEP 5: GENERATING FIX WITH CLAUDE AI")
-        print("-"*80)
-        
+        logger.info("-" * 80)
+        logger.info("STEP 5: GENERATING FIX WITH CLAUDE AI")
+        logger.info("-" * 80)
+
         # Get context with retry
         @retry_github_api
         def get_readme():
             try:
                 return self.repo.get_readme().decoded_content.decode("utf-8")[:2000]
-            except:
+            except Exception:
                 return "No README found"
 
         try:
             readme = get_readme()
             if readme == "No README found":
-                print("   ⚠️  No README found")
+                logger.warning("No README found")
             else:
-                print("   ✅ Loaded README context")
-        except:
+                logger.info("Loaded README context")
+        except Exception as e:
             readme = "No README found"
-            print("   ⚠️  No README found")
+            github_error = get_exception_for_github_error(e, "Failed to load README")
+            logger.warning(f"Failed to load README: {github_error}")
 
         # Build prompt for Claude CLI
         cli_prompt = f"""You are an expert software engineer. Fix this GitHub issue by modifying the necessary files.
@@ -435,14 +493,14 @@ Instructions:
 
 You have access to Read and Write tools to modify files in the current directory."""
 
-        print(f"   📝 Prompt prepared ({len(cli_prompt)} chars)")
-        print(f"   🎯 Issue type: {', '.join(issue_labels)}")
+        logger.debug(f"Prompt prepared ({len(cli_prompt)} chars)")
+        logger.info(f"Issue type: {', '.join(issue_labels)}")
 
         # Try Claude CLI first if available
         if USE_CLAUDE_CLI:
-            print("\n   🤖 Attempting to use Claude CLI Agent...")
-            print("   Tools enabled: Read, Write, Bash")
-            print("   Permission mode: acceptEdits")
+            logger.info("Attempting to use Claude CLI Agent...")
+            logger.debug("Tools enabled: Read, Write, Bash")
+            logger.debug("Permission mode: acceptEdits")
 
             try:
                 # Try to initialize with require_cli=False to check availability
@@ -455,10 +513,10 @@ You have access to Read and Write tools to modify files in the current directory
                 )
 
                 if agent.cli_available:
-                    print("\n   📤 Sending query to Claude CLI...")
-                    print("   " + "="*76)
+                    logger.info("Sending query to Claude CLI...")
+                    logger.info("=" * 76)
                     result = agent.query(cli_prompt, stream_output=True)
-                    print("   " + "="*76)
+                    logger.info("=" * 76)
 
                     # Extract the response
                     if isinstance(result, dict) and "result" in result:
@@ -466,34 +524,35 @@ You have access to Read and Write tools to modify files in the current directory
                     else:
                         summary = str(result)
 
-                    print(f"\n   ✅ Claude CLI completed work successfully")
-                    print(f"   📊 Response length: {len(summary)} chars")
-                    
+                    logger.info("Claude CLI completed work successfully")
+                    logger.info(f"Response length: {len(summary)} chars")
+
                     # Print the full output
-                    print("\n   📄 CLAUDE OUTPUT:")
-                    print("   " + "-"*76)
+                    logger.info("CLAUDE OUTPUT:")
+                    logger.info("-" * 76)
                     for line in summary.split('\n'):
-                        print(f"   {line}")
-                    print("   " + "-"*76)
+                        logger.info(line)
+                    logger.info("-" * 76)
 
                     return summary
                 else:
-                    print("   ⚠️  Claude CLI not available, falling back to Anthropic SDK")
+                    logger.warning("Claude CLI not available, falling back to Anthropic SDK")
 
             except Exception as e:
-                print(f"\n   ⚠️  Claude CLI error: {e}")
-                print("   ℹ️  Falling back to Anthropic SDK")
+                agent_error = AgentError(f"Claude CLI error: {e}")
+                logger.warning(f"Claude CLI error: {agent_error}")
+                logger.info("Falling back to Anthropic SDK")
 
         # Fallback to Anthropic SDK
-        print("\n   🤖 Using Anthropic SDK (API-based approach)")
-        
+        logger.info("Using Anthropic SDK (API-based approach)")
+
         if not self.anthropic_api_key:
-            print("   ❌ No Anthropic API key provided")
+            logger.error("No Anthropic API key provided")
             return None
 
         try:
             client = Anthropic(api_key=self.anthropic_api_key)
-            
+
             # Build a simpler prompt for API (no tool use)
             api_prompt = f"""You are an expert software engineer. Analyze this GitHub issue and provide a detailed solution.
 
@@ -516,62 +575,65 @@ Please provide:
 
 Format your response clearly with sections."""
 
-            print("\n   📤 Sending query to Claude API...")
-            
+            logger.info("Sending query to Claude API...")
+
             response = client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=4096,
                 messages=[{"role": "user", "content": api_prompt}]
             )
-            
+
             summary = response.content[0].text
-            
-            print(f"\n   ✅ Claude API completed successfully")
-            print(f"   📊 Response length: {len(summary)} chars")
-            
+
+            logger.info("Claude API completed successfully")
+            logger.info(f"Response length: {len(summary)} chars")
+
             # Print the output
-            print("\n   📄 CLAUDE OUTPUT:")
-            print("   " + "-"*76)
+            logger.info("CLAUDE OUTPUT:")
+            logger.info("-" * 76)
             summary_lines = summary.split('\n')
             for line in summary_lines[:50]:  # Limit output
-                print(f"   {line}")
+                logger.info(line)
             if len(summary_lines) > 50:
                 remaining_lines = len(summary_lines) - 50
-                print(f"   ... ({remaining_lines} more lines)")
-            print("   " + "-"*76)
-            
-            print("\n   ⚠️  Note: API mode provides guidance only")
-            print("   ℹ️  Manual code changes may be needed based on the suggestions")
+                logger.info(f"... ({remaining_lines} more lines)")
+            logger.info("-" * 76)
+
+            logger.warning("Note: API mode provides guidance only")
+            logger.info("Manual code changes may be needed based on the suggestions")
 
             return summary
 
         except Exception as e:
-            print(f"\n   ❌ Anthropic SDK error: {e}")
-            import traceback
-            traceback.print_exc()
+            anthropic_error = get_exception_for_anthropic_error(e, "Anthropic SDK error")
+            logger.exception(f"Anthropic SDK error: {anthropic_error}")
             return None
 
     def _create_pr_if_changes(self, issue, branch_name: str, summary: str) -> bool:
         """Create a PR if files were modified"""
-        print("\n" + "-"*80)
-        print("📋 STEP 6: COMMITTING CHANGES & CREATING PR")
-        print("-"*80)
-        
+        logger.info("-" * 80)
+        logger.info("STEP 6: COMMITTING CHANGES & CREATING PR")
+        logger.info("-" * 80)
+
         if not self.git_repo.is_dirty(untracked_files=True):
-            print("   ⚠️  No files were modified")
+            logger.warning("No files were modified")
             if not self.dry_mode:
-                issue.create_comment(
-                    "⚠️ No changes were made. The issue may need manual review."
-                )
+                try:
+                    issue.create_comment(
+                        "No changes were made. The issue may need manual review."
+                    )
+                except Exception as e:
+                    github_error = get_exception_for_github_error(e, "Failed to post no changes comment")
+                    logger.exception(f"Failed to post no changes comment: {github_error}")
                 # Track as failed (no changes)
                 self.outcome_tracker.update_status(
                     issue_number=issue.number,
                     status=ResolutionStatus.FAILED,
                     error_message="No file changes generated"
                 )
-                print("   📊 Outcome tracking: Marked as FAILED (no changes)")
+                logger.debug("Outcome tracking: Marked as FAILED (no changes)")
             else:
-                print("   🔍 DRY MODE: Would post no changes comment")
+                logger.debug("DRY MODE: Would post no changes comment")
             return False
 
         # Get list of changed files
@@ -579,14 +641,15 @@ Format your response clearly with sections."""
         untracked_files = self.git_repo.untracked_files
         files_modified = changed_files + untracked_files
 
-        print(f"   📝 Files modified: {len(files_modified)}")
+        logger.info(f"Files modified: {len(files_modified)}")
         for f in files_modified:
-            print(f"      ✏️  {f}")
+            logger.info(f"- {f}")
 
         # Commit changes
-        print("\n   📦 Committing changes...")
-        self.git_repo.git.add("-A")
-        commit_message = f"""Fix: Resolve issue #{issue.number}
+        logger.info("Committing changes...")
+        try:
+            self.git_repo.git.add("-A")
+            commit_message = f"""Fix: Resolve issue #{issue.number}
 
 {issue.title}
 
@@ -595,38 +658,43 @@ Closes #{issue.number}
 ---
 Generated by Issue Resolver Agent using Claude Agent SDK"""
 
-        self.git_repo.index.commit(commit_message)
-        print("   ✅ Changes committed")
+            self.git_repo.index.commit(commit_message)
+            logger.info("Changes committed")
+        except git.GitCommandError as e:
+            error = BranchError(f"Failed to commit changes: {e}")
+            logger.exception(f"Failed to commit changes: {error}")
+            raise error
 
         if self.dry_mode:
-            print(f"   🔍 DRY MODE: Would push branch '{branch_name}' to origin")
-            print("   🔍 DRY MODE: Would create pull request")
-            print("   🔍 DRY MODE: Would update issue with results")
-            print("\n" + "="*80)
-            print("🎉 DRY MODE: WORKFLOW VALIDATION COMPLETED SUCCESSFULLY")
-            print("="*80)
-            print(f"\n📊 SUMMARY (DRY MODE):")
-            print(f"   Issue: #{issue.number} - {issue.title}")
-            print(f"   Branch: {branch_name}")
-            print(f"   Files changed: {len(files_modified)}")
-            print(f"   Status: ✅ Would be ready for review")
-            print("\n" + "="*80 + "\n")
+            logger.debug(f"DRY MODE: Would push branch '{branch_name}' to origin")
+            logger.debug("DRY MODE: Would create pull request")
+            logger.debug("DRY MODE: Would update issue with results")
+            logger.info("=" * 80)
+            logger.info("DRY MODE: WORKFLOW VALIDATION COMPLETED SUCCESSFULLY")
+            logger.info("=" * 80)
+            logger.info(f"SUMMARY (DRY MODE):")
+            logger.info(f"Issue: #{issue.number} - {issue.title}")
+            logger.info(f"Branch: {branch_name}")
+            logger.info(f"Files changed: {len(files_modified)}")
+            logger.info(f"Status: Would be ready for review")
+            logger.info("=" * 80)
             return True
 
         # Push
-        print(f"   📤 Pushing branch '{branch_name}' to origin...")
+        logger.info(f"Pushing branch '{branch_name}' to origin...")
         origin = self.git_repo.remote("origin")
         try:
             push_info = origin.push(branch_name)
             if push_info and push_info[0].flags & push_info[0].ERROR:
-                raise Exception(f"Push failed: {push_info[0].summary}")
-            print(f"   ✅ Branch pushed successfully")
-        except Exception as e:
-            print(f"   ❌ Failed to push branch: {e}")
-            raise
+                raise PushError(f"Push failed: {push_info[0].summary}")
+            logger.info("Branch pushed successfully")
+        except git.GitCommandError as e:
+            error = PushError(f"Failed to push branch: {e}")
+            logger.exception(f"Failed to push branch: {error}")
+            raise error
 
         # Create PR with retry
-        print("\n   🔀 Creating Pull Request...")
+        logger.info("Creating Pull Request...")
         pr_title = f"Fix: {issue.title}"
         pr_body = f"""{summary[:500]}
 
@@ -644,17 +712,24 @@ Closes #{issue.number}
             try:
                 self.repo.get_branch(branch_name)
             except Exception as e:
-                print(f"   ⚠️  Branch not found on remote yet, retrying... ({e})")
-                raise
-            
+                github_error = get_exception_for_github_error(e, "Branch not found on remote yet")
+                logger.warning(f"Branch not found on remote yet, retrying... ({github_error})")
+                raise github_error
+
             return self.repo.create_pull(
                 title=pr_title, body=pr_body, head=branch_name, base="main"
             )
 
-        pr = create_pr()
+        try:
+            pr = create_pr()
+        except Exception as e:
+            github_error = get_exception_for_github_error(e, "Failed to create pull request")
+            error = PRCreationError(f"Failed to create pull request: {github_error}")
+            logger.exception(f"Failed to create pull request: {error}")
+            raise error
 
-        print(f"   ✅ Pull Request created: #{pr.number}")
-        print(f"   🔗 URL: {pr.html_url}")
+        logger.info(f"Pull Request created: #{pr.number}")
+        logger.info(f"URL: {pr.html_url}")
 
         # Track successful PR creation
         self.outcome_tracker.update_status(
@@ -663,15 +738,15 @@ Closes #{issue.number}
             pr_number=pr.number,
             files_changed=len(files_modified)
         )
-        print(f"   📊 Outcome tracking: Marked as RESOLVED (PR #{pr.number})")
+        logger.debug(f"Outcome tracking: Marked as RESOLVED (PR #{pr.number})")
 
         # Update issue with retry
-        print("\n   💬 Updating issue with results...")
+        logger.info("Updating issue with results...")
 
         @retry_github_api
         def update_issue():
             return issue.create_comment(
-                f"""✅ **Solution Ready**
+                f"""**Solution Ready**
 
 Pull Request: #{pr.number}
 
@@ -682,17 +757,22 @@ Pull Request: #{pr.number}
 *Completed at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*"""
             )
 
-        update_issue()
-        print("   ✅ Issue updated")
+        try:
+            update_issue()
+            logger.info("Issue updated")
+        except Exception as e:
+            github_error = get_exception_for_github_error(e, "Failed to update issue")
+            logger.exception(f"Failed to update issue: {github_error}")
+            # Don't raise here - PR was created successfully
 
-        print("\n" + "="*80)
-        print("🎉 WORKFLOW COMPLETED SUCCESSFULLY")
-        print("="*80)
-        print(f"\n📊 SUMMARY:")
-        print(f"   Issue: #{issue.number} - {issue.title}")
-        print(f"   Branch: {branch_name}")
-        print(f"   PR: #{pr.number}")
-        print(f"   Files changed: {len(files_modified)}")
-        print(f"   Status: ✅ Ready for review")
-        print("\n" + "="*80 + "\n")
+        logger.info("=" * 80)
+        logger.info("WORKFLOW COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
+        logger.info(f"SUMMARY:")
+        logger.info(f"Issue: #{issue.number} - {issue.title}")
+        logger.info(f"Branch: {branch_name}")
+        logger.info(f"PR: #{pr.number}")
+        logger.info(f"Files changed: {len(files_modified)}")
+        logger.info(f"Status: Ready for review")
+        logger.info("=" * 80)
         return True

@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from utils.deduplication import IssueDuplicateChecker
+from utils.rate_limiter import RateLimiter, RateLimitConfig
 
 
 class MockIssue:
@@ -381,6 +382,223 @@ class TestIssueDuplicateChecker:
         # Should have some output (either UNIQUE or DUPLICATE)
         assert len(captured.out) > 0
         assert "UNIQUE" in captured.out or "DUPLICATE" in captured.out
+
+
+class TestQualityScoring:
+    """Test suite for quality scoring"""
+
+    def test_quality_score_good_issue(self):
+        """Test quality scoring for a well-formed issue"""
+        checker = IssueDuplicateChecker(enable_quality_gates=True)
+
+        title = "Add user authentication feature to API"
+        body = "We need to implement JWT-based authentication for the REST API. This should include login, logout, and token refresh endpoints with proper error handling."
+        labels = ["feature"]
+
+        scores = checker.calculate_quality_score(title, body, labels)
+
+        assert scores["overall"] >= 0.5
+        assert scores["passes_quality_gate"] is True
+        assert scores["clarity"] > 0.4
+        assert scores["actionability"] > 0.4
+
+    def test_quality_score_poor_issue(self):
+        """Test quality scoring for a poorly formed issue"""
+        checker = IssueDuplicateChecker(enable_quality_gates=True, min_quality_score=0.5)
+
+        title = "Fix it"
+        body = "Something is broken maybe"
+        labels = []
+
+        scores = checker.calculate_quality_score(title, body, labels)
+
+        assert scores["overall"] < 0.5
+        assert scores["passes_quality_gate"] is False
+        assert len(scores["feedback"]) > 1
+
+    def test_quality_gate_filtering(self):
+        """Test that quality gates filter low-quality issues"""
+        checker = IssueDuplicateChecker(
+            enable_quality_gates=True,
+            min_quality_score=0.5
+        )
+
+        new_issues = [
+            {
+                "title": "Implement user authentication with JWT tokens",
+                "body": "Add secure JWT-based authentication system with login, logout, and token refresh endpoints",
+                "labels": ["feature"]
+            },
+            {
+                "title": "Fix",
+                "body": "Something broke",
+                "labels": []
+            }
+        ]
+
+        existing_issues = []
+        unique, duplicates = checker.check_issue_list(new_issues, existing_issues)
+
+        # Should filter out the low-quality issue
+        assert len(unique) == 1
+        assert "authentication" in unique[0]["title"].lower()
+
+    def test_semantic_similarity_fallback(self):
+        """Test fallback semantic similarity without embeddings"""
+        checker = IssueDuplicateChecker(enable_semantic_dedup=False)
+
+        # Similar concepts, different wording
+        title1 = "Add user authentication system"
+        body1 = "Implement secure login and registration"
+
+        title2 = "Implement authentication feature"
+        body2 = "Create secure login and signup functionality"
+
+        sim = checker._fallback_semantic_similarity(title1, body1, title2, body2)
+
+        # Should detect semantic similarity
+        assert sim > 0.3  # Some overlap in concepts
+
+    def test_semantic_similarity_different_concepts(self):
+        """Test semantic similarity with completely different concepts"""
+        checker = IssueDuplicateChecker(enable_semantic_dedup=False)
+
+        title1 = "Add database migration scripts"
+        body1 = "Create SQL migration scripts for schema changes"
+
+        title2 = "Improve frontend performance"
+        body2 = "Optimize React component rendering"
+
+        sim = checker._fallback_semantic_similarity(title1, body1, title2, body2)
+
+        # Should not detect similarity
+        assert sim < 0.3
+
+
+class TestRateLimiter:
+    """Test suite for rate limiter"""
+
+    def test_rate_limiter_allows_first_generation(self, tmp_path):
+        """Test that rate limiter allows first generation"""
+        limiter = RateLimiter(
+            config=RateLimitConfig(max_issues_per_hour=10),
+            state_path=tmp_path / "rate_limit_state.json"
+        )
+
+        can_generate, reason = limiter.can_generate()
+        assert can_generate is True
+        assert reason is None
+
+    def test_rate_limiter_hourly_limit(self, tmp_path):
+        """Test hourly rate limit enforcement"""
+        limiter = RateLimiter(
+            config=RateLimitConfig(
+                max_issues_per_hour=5,
+                min_time_between_generations_minutes=0  # Disable for test
+            ),
+            state_path=tmp_path / "rate_limit_state.json"
+        )
+
+        # Record 5 issues created (hitting limit)
+        limiter.record_generation(
+            issues_proposed=5,
+            issues_created=5,
+            duplicates_filtered=0
+        )
+
+        # Should block next generation
+        can_generate, reason = limiter.can_generate()
+        assert can_generate is False
+        assert "Hourly rate limit" in reason
+
+    def test_rate_limiter_duplicate_rate_cooldown(self, tmp_path):
+        """Test that high duplicate rate triggers cooldown"""
+        limiter = RateLimiter(
+            config=RateLimitConfig(
+                max_duplicate_rate=0.5,
+                cooldown_minutes=60,
+                min_time_between_generations_minutes=0  # Disable for test
+            ),
+            state_path=tmp_path / "rate_limit_state.json"
+        )
+
+        # Record 3 attempts with high duplicate rate
+        for _ in range(3):
+            limiter.record_generation(
+                issues_proposed=10,
+                issues_created=2,
+                duplicates_filtered=8  # 80% duplicate rate
+            )
+
+        # Should trigger cooldown
+        can_generate, reason = limiter.can_generate()
+        assert can_generate is False
+        assert "duplicate rate" in reason.lower()
+
+    def test_rate_limiter_quality_rejection_cooldown(self, tmp_path):
+        """Test that high quality rejection rate triggers cooldown"""
+        limiter = RateLimiter(
+            config=RateLimitConfig(
+                max_quality_reject_rate=0.4,
+                cooldown_minutes=60,
+                min_time_between_generations_minutes=0  # Disable for test
+            ),
+            state_path=tmp_path / "rate_limit_state.json"
+        )
+
+        # Record 3 attempts with high quality rejection rate
+        for _ in range(3):
+            limiter.record_generation(
+                issues_proposed=10,
+                issues_created=3,
+                duplicates_filtered=1,
+                quality_rejected=6  # 60% rejection rate
+            )
+
+        # Should trigger cooldown
+        can_generate, reason = limiter.can_generate()
+        assert can_generate is False
+        assert "quality rejection" in reason.lower()
+
+    def test_rate_limiter_statistics(self, tmp_path):
+        """Test rate limiter statistics calculation"""
+        limiter = RateLimiter(
+            config=RateLimitConfig(max_issues_per_hour=10),
+            state_path=tmp_path / "rate_limit_state.json"
+        )
+
+        limiter.record_generation(
+            issues_proposed=5,
+            issues_created=3,
+            duplicates_filtered=2,
+            quality_rejected=0
+        )
+
+        stats = limiter.get_statistics()
+
+        assert stats["last_hour"]["issues_created"] == 3
+        assert stats["last_hour"]["remaining"] == 7
+        assert stats["lifetime"]["total_duplicates"] == 2
+        assert stats["lifetime"]["duplicate_rate"] == 0.4  # 2/5
+
+    def test_rate_limiter_min_time_between_generations(self, tmp_path):
+        """Test minimum time between generations"""
+        limiter = RateLimiter(
+            config=RateLimitConfig(min_time_between_generations_minutes=10),
+            state_path=tmp_path / "rate_limit_state.json"
+        )
+
+        # First generation
+        limiter.record_generation(
+            issues_proposed=3,
+            issues_created=3,
+            duplicates_filtered=0
+        )
+
+        # Immediate second generation should be blocked
+        can_generate, reason = limiter.can_generate()
+        assert can_generate is False
+        assert "Too soon" in reason
 
 
 if __name__ == "__main__":

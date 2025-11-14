@@ -20,6 +20,7 @@ from utils.retry import retry_anthropic_api, retry_github_api
 from utils.deduplication import IssueDuplicateChecker
 from utils.outcome_tracker import OutcomeTracker
 from utils.feedback_analyzer import FeedbackAnalyzer
+from utils.rate_limiter import RateLimiter, RateLimitConfig
 from utils.exceptions import (
     AgentResponseError,
     JSONParseError,
@@ -74,25 +75,51 @@ class IssueGenerator:
             "use_claude_cli": USE_CLAUDE_CLI
         })
 
-        # Initialize duplicate checker with tuned thresholds
+        # Initialize duplicate checker with enhanced features
         self.duplicate_checker = IssueDuplicateChecker(
             title_similarity_threshold=0.75,
             body_similarity_threshold=0.60,
             combined_similarity_threshold=0.65,
+            semantic_similarity_threshold=0.85,
+            min_quality_score=0.5,
+            anthropic_api_key=anthropic_api_key,
+            enable_semantic_dedup=True,
+            enable_quality_gates=True,
         )
 
         # Initialize feedback loop components
         self.outcome_tracker = OutcomeTracker()
         self.feedback_analyzer = FeedbackAnalyzer(self.outcome_tracker)
 
+        # Initialize rate limiter
+        self.rate_limiter = RateLimiter(
+            config=RateLimitConfig(
+                max_issues_per_hour=10,
+                max_issues_per_day=50,
+                max_duplicate_rate=0.7,
+                max_quality_reject_rate=0.5,
+                cooldown_minutes=60,
+                min_time_between_generations_minutes=5
+            )
+        )
+
     def check_and_generate(self) -> bool:
         """
-        Check issue count and generate if needed
+        Check issue count and generate if needed (with rate limiting)
 
         Returns:
             bool: True if issues were generated, False otherwise
         """
         logger.info(f"Checking issue count (minimum: {self.min_issues})")
+
+        # Check rate limiter first
+        can_generate, reason = self.rate_limiter.can_generate()
+        if not can_generate:
+            logger.info(f"Rate limit check failed: {reason}")
+            # Log statistics
+            stats = self.rate_limiter.get_statistics()
+            logger.info("Rate limit stats", extra=stats)
+            return False
 
         # Count open issues (excluding pull requests) with retry
         @retry_github_api
@@ -354,13 +381,26 @@ Keep descriptions brief and output ONLY the JSON, nothing else."""
                         logger.error(f"Failed to create issue '{title}': {e}")
                         raise get_exception_for_github_error(e, f"Failed to create issue '{title}'")
 
+            # Calculate quality rejections (proposed - created - duplicates)
+            quality_rejected = len(issues_to_create) - created_count - len(duplicates)
+
             # Report final statistics
             logger.info("Deduplication Summary", extra={
                 "proposed": len(issues_to_create),
                 "duplicates_filtered": len(duplicates),
+                "quality_rejected": quality_rejected,
                 "created": created_count,
                 "spam_reduction_pct": (len(duplicates) / len(issues_to_create) * 100) if len(issues_to_create) > 0 else 0
             })
+
+            # Record in rate limiter
+            if not self.dry_mode:
+                self.rate_limiter.record_generation(
+                    issues_proposed=len(issues_to_create),
+                    issues_created=created_count,
+                    duplicates_filtered=len(duplicates),
+                    quality_rejected=quality_rejected
+                )
 
             if self.dry_mode:
                 logger.info(f"DRY MODE: Would have generated {created_count} unique issue(s)")

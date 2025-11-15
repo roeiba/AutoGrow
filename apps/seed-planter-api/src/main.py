@@ -6,11 +6,20 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Dict
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from config import config
+from database import get_db, init_db
+from db_models import User
+from auth import get_current_active_user
+from usage_metering import UsageMeteringService
+
+# Import routers
+from auth_routes import router as auth_router
+from billing_routes import router as billing_router
 
 # Configure logging
 logging.basicConfig(
@@ -19,9 +28,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 from models import (
-    PlantSeedRequest, 
-    PlantSeedResponse, 
-    ProjectDetails, 
+    PlantSeedRequest,
+    PlantSeedResponse,
+    ProjectDetails,
     ProjectListResponse,
     ProjectStatus,
     ProjectProgress,
@@ -64,6 +73,12 @@ async def lifespan(app: FastAPI):
     logger.info("🌱 Seed Planter API starting up...")
     logger.info(f"   Mode: {config.api_debug and 'DEBUG' or 'PRODUCTION'}")
     logger.info(f"   Host: {config.api_host}:{config.api_port}")
+
+    # Initialize database
+    logger.info("📊 Initializing database...")
+    init_db()
+    logger.info("✅ Database initialized")
+
     yield
     # Shutdown
     logger.info("👋 Seed Planter API shutting down...")
@@ -84,6 +99,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(auth_router)
+app.include_router(billing_router)
 
 
 @app.get("/")
@@ -171,43 +190,63 @@ async def exchange_oauth_code(request: OAuthExchangeRequest):
 
 
 @app.post("/api/v1/projects", response_model=PlantSeedResponse)
-async def plant_seed(request: PlantSeedRequest, req: Request):
+async def plant_seed(
+    request: PlantSeedRequest,
+    req: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """
-    Plant a new project seed
-    
+    Plant a new project seed (requires authentication)
+
     This endpoint initiates the planting of a permanent project that will grow
     autonomously. Creates GitHub org, forks SeedGPT template, customizes with AI,
     sets up GCP, and deploys.
+
+    Usage is metered and counts against your monthly quota.
     """
-    
+
     logger.info(f"📥 Received plant seed request: {request.project_name}")
+    logger.info(f"   User: {current_user.email}")
     logger.info(f"   Description: {request.project_description[:100]}...")
     logger.info(f"   Mode: {request.mode.value}")
-    
+
     try:
+        # Check and enforce usage quota
+        metering_service = UsageMeteringService(db)
+        metering_service.enforce_quota(current_user, operation_count=1)
+
         # Generate project ID upfront
         import uuid
         project_id = str(uuid.uuid4())
-        
+
+        # Increment usage counters
+        metering_service.increment_usage(
+            user=current_user,
+            ai_operations=1,
+            projects=1,
+            api_calls=1
+        )
+
         # Create progress callback
         async def progress_callback(progress: ProjectProgress):
             await manager.send_progress(progress)
-        
+
         # Start project planting in background
         asyncio.create_task(
             seed_planter.plant_seed(
                 request.project_name,
                 request.project_description,
                 request.mode,
-                request.user_email,
+                request.user_email or current_user.email,
                 progress_callback
             )
         )
-        
+
         # Return immediate response with correct WebSocket URL
         ws_protocol = "wss" if req.url.scheme == "https" else "ws"
         ws_host = req.url.netloc  # includes port if present
-        
+
         response = PlantSeedResponse(
             project_id=project_id,
             status=ProjectStatus.INITIALIZING,
@@ -215,9 +254,12 @@ async def plant_seed(request: PlantSeedRequest, req: Request):
             websocket_url=f"{ws_protocol}://{ws_host}/api/v1/projects/{project_id}/ws",
             estimated_completion_time=120  # ~2 minutes
         )
-        
+
         return response
-        
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (like quota exceeded)
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to plant seed: {str(e)}")
 

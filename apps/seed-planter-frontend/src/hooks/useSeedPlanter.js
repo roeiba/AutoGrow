@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import Logger from '../utils/logger'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const logger = new Logger('SeedPlanter')
 
 export function useSeedPlanter() {
   const [progress, setProgress] = useState(null)
@@ -24,15 +26,18 @@ export function useSeedPlanter() {
     const wsProtocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${wsProtocol}//${apiUrl.host}/api/v1/projects/${projectId}/ws`
     
+    logger.websocket(`Connecting to WebSocket: ${wsUrl}`)
+    
     try {
       const ws = new WebSocket(wsUrl)
       
       ws.onopen = () => {
-        console.log('WebSocket connected')
+        logger.success('WebSocket connected successfully')
         // Send ping to keep connection alive
         const pingInterval = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send('ping')
+            logger.debug('Sent ping to keep connection alive')
           }
         }, 30000)
         
@@ -44,34 +49,39 @@ export function useSeedPlanter() {
           const data = JSON.parse(event.data)
           
           if (data.type === 'pong') {
+            logger.debug('Received pong from server')
             return // Ignore pong messages
           }
           
+          logger.progress(data.message || 'Progress update', data.progress_percent || 0, data)
           setProgress(data)
           
           // Close connection when completed or failed
           if (data.status === 'completed' || data.status === 'failed') {
             setIsPlanting(false)
             if (data.status === 'failed') {
+              logger.error('Project planting failed:', data.message)
               setError(data.message || 'Project planting failed')
+            } else {
+              logger.success('Project planted successfully!', data)
             }
             setTimeout(() => {
               ws.close()
             }, 1000)
           }
         } catch (err) {
-          console.error('Failed to parse WebSocket message:', err)
+          logger.error('Failed to parse WebSocket message:', err)
         }
       }
       
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
+        logger.error('WebSocket error:', error)
         setError('Connection error. Please try again.')
         setIsPlanting(false)
       }
       
       ws.onclose = () => {
-        console.log('WebSocket closed')
+        logger.websocket('WebSocket connection closed')
         if (ws.pingInterval) {
           clearInterval(ws.pingInterval)
         }
@@ -79,7 +89,7 @@ export function useSeedPlanter() {
       
       wsRef.current = ws
     } catch (err) {
-      console.error('Failed to create WebSocket:', err)
+      logger.error('Failed to create WebSocket:', err)
       setError('Failed to establish connection')
       setIsPlanting(false)
     }
@@ -99,11 +109,16 @@ export function useSeedPlanter() {
   }
 
   const plantSeed = async (projectName, projectDescription) => {
+    logger.info(`🌱 Starting to plant project: ${projectName}`)
+    logger.debug(`Description: ${projectDescription}`)
+    
     setIsPlanting(true)
     setError(null)
     setProgress(null)
 
     try {
+      logger.api(`POST ${API_BASE_URL}/api/v1/projects`)
+      
       const response = await fetch(`${API_BASE_URL}/api/v1/projects`, {
         method: 'POST',
         headers: {
@@ -118,17 +133,20 @@ export function useSeedPlanter() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
+        logger.error('API request failed:', errorData)
         throw new Error(errorData.detail || 'Failed to plant seed')
       }
 
       const data = await response.json()
       projectIdRef.current = data.project_id
+      logger.success(`Project created with ID: ${data.project_id}`)
+      logger.debug('Response data:', data)
 
       // Connect to WebSocket for real-time updates
       connectWebSocket(data.project_id)
 
     } catch (err) {
-      console.error('Failed to plant seed:', err)
+      logger.error('Failed to plant seed:', err)
       setError(err.message || 'Failed to plant seed. Please try again.')
       setIsPlanting(false)
     }

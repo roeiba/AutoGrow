@@ -3,6 +3,7 @@
 import asyncio
 import json
 import shutil
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,13 @@ import git
 
 from config import config
 from models import ProjectStatus, ProjectDetails, ProjectProgress, DeploymentType, ProjectMode
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 class SeedPlanter:
@@ -37,11 +45,16 @@ class SeedPlanter:
         """Plant a new project seed and watch it grow"""
         
         project_id = str(uuid.uuid4())
+        logger.info(f"🌱 Starting seed planting for project: {project_name} (ID: {project_id})")
+        logger.info(f"   Mode: {mode.value}, Description: {project_description[:100]}...")
+        
         workspace = self.workspace_base / project_id
         workspace.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"   Created workspace: {workspace}")
 
         # Sanitize project name for GitHub org
         org_name = self._sanitize_org_name(project_name)
+        logger.info(f"   Sanitized org name: {org_name}")
 
         details = ProjectDetails(
             project_id=project_id,
@@ -56,34 +69,41 @@ class SeedPlanter:
 
         try:
             # Step 1: Create GitHub Organization
+            logger.info(f"📦 Step 1/6: Creating GitHub organization")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.CREATING_ORG,
                 f"Creating GitHub organization '{org_name}'...", 10
             )
             
-            org = await self._create_github_org(org_name, project_description)
-            details.org_url = f"https://github.com/{org_name}"
+            org_url, repo_url = await self._create_github_org_and_repo(org_name, project_description, workspace)
+            details.org_url = org_url
+            details.repo_url = repo_url
+            logger.info(f"✅ Organization created: {org_url}")
 
             # Step 2: Fork SeedGPT template
+            logger.info(f"🔀 Step 2/6: Forking SeedGPT template")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.FORKING_TEMPLATE,
                 "Forking SeedGPT template repository...", 25
             )
             
-            repo = await self._fork_seedgpt_template(org, org_name, workspace)
-            details.repo_url = repo.html_url
+            await self._fork_and_customize_template(repo_url, workspace)
+            logger.info(f"✅ Template forked successfully")
 
             # Step 3: Customize project
+            logger.info(f"🤖 Step 3/6: Customizing project with AI")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.CUSTOMIZING_PROJECT,
                 "Customizing project with AI...", 40
             )
             
-            await self._customize_project(
-                repo, workspace, project_name, project_description
+            customization_result = await self._customize_with_ai(
+                project_name, project_description, workspace
             )
+            logger.info(f"✅ AI customization complete")
 
             # Step 4: Create GCP project
+            logger.info(f"☁️  Step 4/6: Setting up Google Cloud project")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.CREATING_GCP_PROJECT,
                 "Setting up Google Cloud project...", 60
@@ -91,42 +111,48 @@ class SeedPlanter:
             
             gcp_project_id = await self._create_gcp_project(org_name)
             details.gcp_project_id = gcp_project_id
+            logger.info(f"✅ GCP project created: {gcp_project_id}")
 
             # Step 5: Determine deployment type and deploy
+            logger.info(f"🚀 Step 5/6: Deploying project")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.DEPLOYING,
                 "Analyzing and deploying project...", 75
             )
             
-            deployment_type, deployment_url = await self._deploy_project(
-                repo, workspace, gcp_project_id, project_description
-            )
+            deployment_type = await self._determine_deployment_type(workspace)
             details.deployment_type = deployment_type
+            logger.info(f"   Deployment type: {deployment_type.value}")
+            
+            deployment_url = await self._deploy_project(workspace, gcp_project_id, deployment_type)
             details.deployment_url = deployment_url
-            details.is_deployed = deployment_url is not None
+            logger.info(f"✅ Deployed to: {deployment_url}")
 
             # Step 6: Create initial issues
+            logger.info(f"📋 Step 6/6: Creating initial development issues")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.CREATING_ISSUES,
                 "Creating initial development issues...", 90
             )
             
-            issues_count = await self._create_initial_issues(repo, project_description)
-            details.issues_created = issues_count
+            issues_created = await self._create_initial_issues(repo_url, project_description)
+            logger.info(f"✅ Created {issues_created} initial issues")
 
             # Complete
+            logger.info(f"🎉 Project '{project_name}' planted successfully!")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.COMPLETED,
                 f"🌱 Project '{project_name}' is planted and growing!", 100,
                 org_url=details.org_url,
                 repo_url=details.repo_url,
-                deployment_url=deployment_url,
-                gcp_project_id=gcp_project_id
+                deployment_url=details.deployment_url
             )
             
             details.status = ProjectStatus.COMPLETED
-
+            return details
+            
         except Exception as e:
+            logger.error(f"❌ Failed to plant seed: {str(e)}", exc_info=True)
             details.status = ProjectStatus.FAILED
             details.error_message = str(e)
             
@@ -135,7 +161,7 @@ class SeedPlanter:
                 f"Failed: {str(e)}", 0
             )
             
-            # Note: We don't cleanup on failure - projects are permanent
+            raise# Note: We don't cleanup on failure - projects are permanent
 
         return details
 

@@ -1,6 +1,7 @@
 """FastAPI application for Seed Planter API"""
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Dict
@@ -10,6 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import config
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 from models import (
     PlantSeedRequest, 
     PlantSeedResponse, 
@@ -51,10 +59,12 @@ seed_planter = SeedPlanter()
 async def lifespan(app: FastAPI):
     """Lifecycle management"""
     # Startup
-    print("🌱 Seed Planter API starting up...")
+    logger.info("🌱 Seed Planter API starting up...")
+    logger.info(f"   Mode: {config.api_debug and 'DEBUG' or 'PRODUCTION'}")
+    logger.info(f"   Host: {config.api_host}:{config.api_port}")
     yield
     # Shutdown
-    print("👋 Seed Planter API shutting down...")
+    logger.info("👋 Seed Planter API shutting down...")
 
 
 app = FastAPI(
@@ -95,6 +105,10 @@ async def plant_seed(request: PlantSeedRequest, req: Request):
     autonomously. Creates GitHub org, forks SeedGPT template, customizes with AI,
     sets up GCP, and deploys.
     """
+    
+    logger.info(f"📥 Received plant seed request: {request.project_name}")
+    logger.info(f"   Description: {request.project_description[:100]}...")
+    logger.info(f"   Mode: {request.mode.value}")
     
     try:
         # Generate project ID upfront
@@ -160,27 +174,21 @@ async def list_projects():
 
 @app.websocket("/api/v1/projects/{project_id}/ws")
 async def websocket_endpoint(websocket: WebSocket, project_id: str):
-    """
-    WebSocket endpoint for real-time progress updates
-    
-    Connect to this endpoint to receive live updates about project planting progress.
-    """
-    
+    """WebSocket endpoint for real-time project progress updates"""
+    logger.info(f"🔌 WebSocket connection request for project: {project_id}")
     await manager.connect(project_id, websocket)
+    logger.info(f"✅ WebSocket connected for project: {project_id}")
     
     try:
-        # Keep connection alive and wait for messages
         while True:
-            # Wait for any message (ping/pong)
+            # Keep connection alive and handle ping/pong
             data = await websocket.receive_text()
-            
-            # Echo back to confirm connection
-            await websocket.send_json({
-                "type": "pong",
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            if data == "ping":
+                await websocket.send_text("pong")
+                logger.debug(f"💓 Ping/pong for project: {project_id}")
             
     except WebSocketDisconnect:
+        logger.info(f"🔌 WebSocket disconnected for project: {project_id}")
         manager.disconnect(project_id)
 
 

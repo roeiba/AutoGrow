@@ -48,8 +48,8 @@ function App() {
             <div className="card">
               <h2 className="text-xl font-semibold mb-4">Try AutoGrow Now</h2>
               <p className="text-gray-600 mb-6">
-                Describe your project idea and watch AI generate a complete repository with structure, 
-                issues, and pull requests - all in under a minute.
+                Describe your project idea and watch AI create the seed of your new business, and grow it. 
+                It simply does everything for you until you earn money.
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">

@@ -89,6 +89,46 @@ Every 10 minutes:
 
 You just review and merge the PRs you like.
 
+## You're in control
+
+SeedGPT is autonomous, but **you're the gardener**. You control how your project grows:
+
+### 🎛️ Tune agent frequencies
+Adjust how often each agent runs by modifying the cron schedules in `.github/workflows/`:
+- **Product Agent** - Generates new features and improvements
+- **Marketing Agent** - Creates content and campaigns
+- **Bug Fix Agent** - Resolves issues automatically
+
+Want more features? Speed up the product agent. Need to slow down? Adjust the schedule.
+
+### 💰 Control the budget
+Set spending limits to manage AI API costs:
+- Configure budget caps in your workflow files
+- Monitor usage through GitHub Actions logs
+- Pause agents anytime by disabling workflows
+
+### ✋ Manage the backlog
+You decide what gets built:
+- **Add issues** - Create custom tasks for the AI to tackle
+- **Remove issues** - Close or delete tasks you don't want
+- **Prioritize** - Label issues to guide what gets picked next
+
+### 👍 Approve or decline
+Every change needs your approval:
+- **Review PRs** - Check the code before it merges
+- **Request changes** - AI will iterate based on your feedback
+- **Merge what you like** - Only approved code goes live
+- **Close what you don't** - Reject PRs that miss the mark
+
+### 🌱 Each seed is unique
+Your SeedGPT instance is yours to customize:
+- Tune frequencies to match your pace
+- Set budgets that fit your resources
+- Guide development with your own issues
+- Approve only what meets your standards
+
+**You plant the seed. You guide its growth. AI does the heavy lifting.**
+
 ## Need help?
 
 - **Questions?** Open a [Discussion](https://github.com/roeiba/seedGPT/discussions)

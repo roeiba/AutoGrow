@@ -157,7 +157,7 @@ jobs:
             --cpu 1 \
             --timeout 300 \
             --set-env-vars "API_HOST=0.0.0.0,API_PORT=8000,GCP_PROJECT_ID=${{ env.PROJECT_ID }},GITHUB_TOKEN=${GITHUB_TOKEN_VALUE},GITHUB_USERNAME=roeiba,ANTHROPIC_API_KEY=${ANTHROPIC_KEY_VALUE},GCP_CREDENTIALS_PATH=/tmp/gcp-creds.json" \
-            --update-secrets "GCP_CREDENTIALS=GCP_CREDENTIALS:latest" \
+            --update-secrets "GCP_CREDENTIALS=GCP_CREDENTIALS:latest,GITHUB_OAUTH_CLIENT_SECRET=GITHUB_OAUTH_CLIENT_SECRET:latest" \
             --project ${{ env.PROJECT_ID }}
 
       - name: Get Service URL

@@ -24,7 +24,9 @@ from models import (
     ProjectDetails, 
     ProjectListResponse,
     ProjectStatus,
-    ProjectProgress
+    ProjectProgress,
+    OAuthExchangeRequest,
+    OAuthExchangeResponse
 )
 from seed_planter import SeedPlanter
 
@@ -94,6 +96,78 @@ async def root():
         "mode": "SaaS",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@app.post("/api/v1/oauth/exchange", response_model=OAuthExchangeResponse)
+async def exchange_oauth_code(request: OAuthExchangeRequest):
+    """
+    Exchange GitHub OAuth authorization code for access token
+    
+    This endpoint acts as a proxy to securely exchange the OAuth code
+    for an access token without exposing the client secret to the frontend.
+    """
+    import httpx
+    
+    logger.info(f"🔐 OAuth token exchange request received")
+    
+    if not config.github_oauth_client_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="OAuth client secret not configured on server"
+        )
+    
+    try:
+        # Exchange code for token with GitHub
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://github.com/login/oauth/access_token",
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "client_id": config.github_oauth_client_id,
+                    "client_secret": config.github_oauth_client_secret,
+                    "code": request.code
+                }
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"GitHub OAuth exchange failed: {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail="Failed to exchange authorization code with GitHub"
+                )
+            
+            data = response.json()
+            
+            if "error" in data:
+                logger.error(f"GitHub OAuth error: {data.get('error_description', data['error'])}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=data.get("error_description", data["error"])
+                )
+            
+            logger.info(f"✅ OAuth token exchange successful")
+            
+            return OAuthExchangeResponse(
+                access_token=data["access_token"],
+                token_type=data.get("token_type", "bearer"),
+                scope=data.get("scope", "")
+            )
+            
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error during OAuth exchange: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to communicate with GitHub: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during OAuth exchange: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error during token exchange: {str(e)}"
+        )
 
 
 @app.post("/api/v1/projects", response_model=PlantSeedResponse)

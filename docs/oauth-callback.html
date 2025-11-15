@@ -143,13 +143,12 @@
 
     <script>
         // Configuration
-        const GITHUB_CLIENT_ID = 'Ov23liv5I7Rn6Fh2HJQh'; // TODO: Replace with your actual Client ID
+        const GITHUB_CLIENT_ID = 'Ov23liv5I7Rn6Fh2HJQh';
         const REPO_OWNER = 'roeiba';
         const REPO_NAME = 'SeedGPT';
         
-        // OAuth proxy endpoint - you need to deploy this
-        // For now, we'll use GitHub's device flow as fallback
-        const OAUTH_PROXY_URL = null; // TODO: Set up OAuth proxy endpoint
+        // OAuth proxy endpoint - using seed-planter-api
+        const OAUTH_PROXY_URL = 'https://seed-planter-api-pmxej6pldq-uc.a.run.app/api/v1/oauth/exchange';
 
         async function handleOAuthCallback() {
             const urlParams = new URLSearchParams(window.location.search);

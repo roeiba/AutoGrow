@@ -38,6 +38,10 @@ class SeedPlanterConfig(BaseSettings):
         description="SeedGPT template repository to fork"
     )
     
+    # GitHub OAuth App Configuration
+    github_oauth_client_id: str = Field("Ov23liv5I7Rn6Fh2HJQh", description="GitHub OAuth App Client ID")
+    github_oauth_client_secret: Optional[str] = Field(None, description="GitHub OAuth App Client Secret")
+    
     # Anthropic Configuration
     anthropic_api_key: str = Field(..., description="Anthropic API key for Claude")
     

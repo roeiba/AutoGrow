@@ -97,3 +97,15 @@ class ProjectListResponse(BaseModel):
     """List of planted projects"""
     projects: list[ProjectDetails]
     total: int
+
+
+class OAuthExchangeRequest(BaseModel):
+    """Request to exchange OAuth code for token"""
+    code: str = Field(..., description="GitHub OAuth authorization code")
+
+
+class OAuthExchangeResponse(BaseModel):
+    """Response with access token"""
+    access_token: str = Field(..., description="GitHub access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    scope: str = Field(..., description="Granted scopes")

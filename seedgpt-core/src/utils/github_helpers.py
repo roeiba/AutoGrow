@@ -167,6 +167,20 @@ def get_repo_info(repo) -> dict:
 
 
 @retry_github_api
+def get_open_pull_requests_count(repo) -> int:
+    """
+    Get count of open pull requests in a GitHub repository
+    
+    Args:
+        repo: PyGithub Repository object
+    
+    Returns:
+        int: Number of open pull requests
+    """
+    return repo.get_pulls(state="open").totalCount
+
+
+@retry_github_api
 def create_pull_request(repo, title: str, body: str, head: str, base: str = "main"):
     """
     Create a pull request in a GitHub repository

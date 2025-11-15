@@ -56,7 +56,7 @@ from models_config import CLAUDE_MODELS
 from utils.project_brief_validator import validate_project_brief, get_project_brief
 from utils.retry import retry_github_api
 from utils.outcome_tracker import OutcomeTracker, ResolutionStatus
-from utils.github_helpers import get_readme, get_open_issues_sorted, get_issue, create_pull_request
+from utils.github_helpers import get_readme, get_open_issues_sorted, get_issue, create_pull_request, get_open_pull_requests_count
 from utils.git_helpers import (
     create_branch,
     is_repo_dirty,
@@ -87,7 +87,7 @@ class IssueResolver:
             repo: PyGithub Repository object
             git_repo: GitPython Repo object
             anthropic_api_key: Anthropic API key (required if not using Claude CLI)
-            labels_to_handle: List of labels to handle (default: bug, enhancement)
+            labels_to_handle: List of labels to handle (empty list = handle all types)
             labels_to_skip: List of labels to skip (default: wontfix, duplicate, in-progress)
             max_time: Maximum execution time in seconds
             dry_mode: If True, skip all GitHub write operations (for CI validation)
@@ -95,7 +95,8 @@ class IssueResolver:
         self.repo = repo
         self.git_repo = git_repo
         self.anthropic_api_key = anthropic_api_key
-        self.labels_to_handle = labels_to_handle or ["bug", "enhancement"]
+        # Empty list means handle all issue types, None defaults to ["bug", "enhancement"]
+        self.labels_to_handle = labels_to_handle if labels_to_handle is not None else ["bug", "enhancement"]
         self.labels_to_skip = labels_to_skip or ["wontfix", "duplicate", "in-progress"]
         self.max_time = max_time
         self.dry_mode = dry_mode
@@ -105,7 +106,10 @@ class IssueResolver:
         self.outcome_tracker = OutcomeTracker()
 
         logger.info("Issue Resolver Agent Initialized")
-        logger.info(f"Config: labels_to_handle={self.labels_to_handle}, labels_to_skip={self.labels_to_skip}")
+        if self.labels_to_handle:
+            logger.info(f"Config: labels_to_handle={self.labels_to_handle}, labels_to_skip={self.labels_to_skip}")
+        else:
+            logger.info(f"Config: labels_to_handle=ALL (no restrictions), labels_to_skip={self.labels_to_skip}")
         logger.info(f"Config: dry_mode={self.dry_mode}, outcome_tracking=enabled")
         logger.info("Supports: features, bugs, documentation, refactoring, tests, performance, security, CI/CD")
 
@@ -122,6 +126,21 @@ class IssueResolver:
         logger.info("=" * 80)
         logger.info("STARTING ISSUE RESOLUTION WORKFLOW")
         logger.info("=" * 80)
+
+        # Check if there are too many open PRs
+        try:
+            open_pr_count = get_open_pull_requests_count(self.repo)
+            logger.info(f"Open pull requests: {open_pr_count}")
+            
+            if open_pr_count > 2:
+                logger.warning(f"WORKFLOW ABORTED: Too many open PRs ({open_pr_count} > 2)")
+                logger.info("Skipping issue resolution to avoid overwhelming reviewers")
+                logger.info("=" * 80)
+                return False
+        except Exception as e:
+            github_error = get_exception_for_github_error(e, "Failed to check open PR count")
+            logger.exception(f"Failed to check open PR count: {github_error}")
+            raise github_error
 
         # Select issue
         selected_issue = self._select_issue(specific_issue)

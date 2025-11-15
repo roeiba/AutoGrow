@@ -10,7 +10,7 @@ on:
         required: false
 
 env:
-  ISSUE_LABELS_TO_HANDLE: ${{ vars.ISSUE_LABELS_TO_HANDLE || 'feature,bug,documentation,refactor,test,performance,security,ci/cd,enhancement' }}
+  ISSUE_LABELS_TO_HANDLE: ${{ vars.ISSUE_LABELS_TO_HANDLE || '' }}
   ISSUE_LABELS_TO_SKIP: ${{ vars.ISSUE_LABELS_TO_SKIP || 'wontfix,duplicate,invalid,in-progress' }}
   MAX_EXECUTION_TIME: ${{ vars.MAX_EXECUTION_TIME || '8' }}
 

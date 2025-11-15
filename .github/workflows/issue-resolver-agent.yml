@@ -77,4 +77,4 @@ jobs:
           DISABLE_TELEMETRY: "1"
           DISABLE_ERROR_REPORTING: "1"
           DISABLE_AUTOUPDATER: "1"
-        run: python .github/scripts/issue_resolver.py
+        run: python seedgpt-core/src/cli/issue_resolver_cli.py

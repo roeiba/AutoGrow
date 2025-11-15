@@ -18,6 +18,11 @@ jobs:
   validate-issue-resolver:
     runs-on: ubuntu-latest
     
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,17 +52,21 @@ jobs:
           DRY_MODE: 'true'
         run: |
           echo "🔍 Validating Issue Resolver Agent in dry mode..."
-          python .github/scripts/issue_resolver.py || echo "⚠️ Issue Resolver validation completed with warnings (expected in dry mode)"
+          python seedgpt-core/src/cli/issue_resolver_cli.py || echo "⚠️ Issue Resolver validation completed with warnings (expected in dry mode)"
       
       - name: Check Python syntax
         run: |
           echo "🔍 Checking Python syntax..."
           python -m py_compile seedgpt-core/src/agents/issue_resolver.py
-          python -m py_compile .github/scripts/issue_resolver.py
+          python -m py_compile seedgpt-core/src/cli/issue_resolver_cli.py
           echo "✅ Issue Resolver syntax OK"
 
   validate-issue-generator:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      issues: write
     
     steps:
       - name: Checkout
@@ -81,17 +90,20 @@ jobs:
           DRY_MODE: 'true'
         run: |
           echo "🔍 Validating Issue Generator Agent in dry mode..."
-          python .github/scripts/issue_generator.py || echo "⚠️ Issue Generator validation completed with warnings (expected in dry mode)"
+          python seedgpt-core/src/cli/issue_generator_cli.py || echo "⚠️ Issue Generator validation completed with warnings (expected in dry mode)"
       
       - name: Check Python syntax
         run: |
           echo "🔍 Checking Python syntax..."
           python -m py_compile seedgpt-core/src/agents/issue_generator.py
-          python -m py_compile .github/scripts/issue_generator.py
+          python -m py_compile seedgpt-core/src/cli/issue_generator_cli.py
           echo "✅ Issue Generator syntax OK"
 
   validate-structure:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout
@@ -109,13 +121,13 @@ jobs:
           # Check main directories exist
           test -d seedgpt-core/src/agents && echo "✅ Agents directory exists" || (echo "❌ Agents directory missing" && exit 1)
           test -d .github/workflows && echo "✅ Workflows directory exists" || (echo "❌ Workflows directory missing" && exit 1)
-          test -d .github/scripts && echo "✅ Scripts directory exists" || (echo "❌ Scripts directory missing" && exit 1)
+          test -d seedgpt-core/src/cli && echo "✅ CLI directory exists" || (echo "❌ CLI directory missing" && exit 1)
           
           # Check key files exist
           test -f seedgpt-core/src/agents/issue_resolver.py && echo "✅ Issue Resolver exists" || (echo "❌ Issue Resolver missing" && exit 1)
           test -f seedgpt-core/src/agents/issue_generator.py && echo "✅ Issue Generator exists" || (echo "❌ Issue Generator missing" && exit 1)
-          test -f .github/scripts/issue_resolver.py && echo "✅ Issue Resolver wrapper exists" || (echo "❌ Issue Resolver wrapper missing" && exit 1)
-          test -f .github/scripts/issue_generator.py && echo "✅ Issue Generator wrapper exists" || (echo "❌ Issue Generator wrapper missing" && exit 1)
+          test -f seedgpt-core/src/cli/issue_resolver_cli.py && echo "✅ Issue Resolver CLI exists" || (echo "❌ Issue Resolver CLI missing" && exit 1)
+          test -f seedgpt-core/src/cli/issue_generator_cli.py && echo "✅ Issue Generator CLI exists" || (echo "❌ Issue Generator CLI missing" && exit 1)
       
       - name: Check Python syntax for all agents
         run: |
@@ -128,8 +140,8 @@ jobs:
             fi
           done
           
-          # Check all Python files in .github/scripts
-          for file in .github/scripts/*.py; do
+          # Check all Python files in seedgpt-core/src/cli
+          for file in seedgpt-core/src/cli/*.py; do
             if [ -f "$file" ]; then
               python -m py_compile "$file" && echo "✅ $(basename $file) syntax OK" || (echo "❌ $(basename $file) syntax error" && exit 1)
             fi
@@ -137,6 +149,10 @@ jobs:
 
   validate-specialized-agents:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - name: Checkout
@@ -170,6 +186,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate-issue-resolver, validate-issue-generator, validate-structure, validate-specialized-agents]
     if: always()
+    
+    permissions:
+      contents: read
     
     steps:
       - name: Validation Summary

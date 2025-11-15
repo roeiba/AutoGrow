@@ -67,7 +67,7 @@ jobs:
         run: |
           echo "🔍 Validating QA Agent in dry mode..."
           echo "This is a validation run - no issues will be created"
-          python -c "from src.agents.qa_agent import QAAgent; print('✅ QA Agent imports successfully')"
+          cd seedgpt-core && python -c "from src.agents.qa_agent import QAAgent; print('✅ QA Agent imports successfully')"
 
   qa-check:
     if: github.event_name != 'pull_request' && github.event_name != 'push'
@@ -113,4 +113,4 @@ jobs:
           PYTHONUNBUFFERED: '1'
         run: |
           echo "Running QA Agent for repository: $REPO_NAME"
-          python .github/scripts/qa_agent.py
+          python seedgpt-core/src/cli/qa_agent_cli.py

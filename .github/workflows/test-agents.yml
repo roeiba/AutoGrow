@@ -28,6 +28,11 @@ name: Test AI Agents
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
 jobs:
   test-unit:
     name: Unit Tests

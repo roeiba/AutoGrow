@@ -63,4 +63,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           REPO_NAME: ${{ github.repository }}
-        run: python .github/scripts/issue_generator.py
+        run: python seedgpt-core/src/cli/issue_generator_cli.py

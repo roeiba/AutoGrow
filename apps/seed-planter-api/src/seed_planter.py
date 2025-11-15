@@ -113,20 +113,17 @@ class SeedPlanter:
             details.gcp_project_id = gcp_project_id
             logger.info(f"✅ GCP project created: {gcp_project_id}")
 
-            # Step 5: Determine deployment type and deploy
+            # Step 5: Deploy project (skipped for now - manual deployment)
             logger.info(f"🚀 Step 5/6: Deploying project")
             await self._update_progress(
                 progress_callback, project_id, ProjectStatus.DEPLOYING,
-                "Analyzing and deploying project...", 75
+                "Project ready for deployment (manual setup required)...", 75
             )
             
-            deployment_type = await self._determine_deployment_type(workspace)
-            details.deployment_type = deployment_type
-            logger.info(f"   Deployment type: {deployment_type.value}")
-            
-            deployment_url = await self._deploy_project(workspace, gcp_project_id, deployment_type)
-            details.deployment_url = deployment_url
-            logger.info(f"✅ Deployed to: {deployment_url}")
+            # TODO: Implement automatic deployment
+            # For now, users deploy manually using the repository
+            details.deployment_url = f"https://github.com/{main_repo.full_name}"
+            logger.info(f"✅ Repository ready for deployment: {details.deployment_url}")
 
             # Step 6: Create initial issues
             logger.info(f"📋 Step 6/6: Creating initial development issues")

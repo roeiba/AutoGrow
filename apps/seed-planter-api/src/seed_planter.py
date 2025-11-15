@@ -266,16 +266,29 @@ class SeedPlanter:
                 logger.info("   Deleted apps/ folder")
             
             # Delete app-specific workflows (they reference deleted apps)
-            apps_workflows_path = repo_path / ".github" / "workflows" / "apps"
-            if apps_workflows_path.exists():
-                shutil.rmtree(apps_workflows_path)
-                logger.info("   Deleted .github/workflows/apps/ folder")
-            
-            # Delete testing workflows (only needed for SeedGPT development)
-            testing_workflows_path = repo_path / ".github" / "workflows" / "testing"
-            if testing_workflows_path.exists():
-                shutil.rmtree(testing_workflows_path)
-                logger.info("   Deleted .github/workflows/testing/ folder")
+            # GitHub doesn't support workflow subdirectories, so we use naming convention
+            workflows_path = repo_path / ".github" / "workflows"
+            if workflows_path.exists():
+                deleted_count = 0
+                for workflow_file in workflows_path.glob("apps-*.yml"):
+                    workflow_file.unlink()
+                    deleted_count += 1
+                    logger.info(f"   Deleted workflow: {workflow_file.name}")
+                
+                # Delete testing workflows (only needed for SeedGPT development)
+                for workflow_file in workflows_path.glob("testing-*.yml"):
+                    workflow_file.unlink()
+                    deleted_count += 1
+                    logger.info(f"   Deleted workflow: {workflow_file.name}")
+                
+                # Delete testing workflow examples
+                for workflow_file in workflows_path.glob("testing-*.example"):
+                    workflow_file.unlink()
+                    deleted_count += 1
+                    logger.info(f"   Deleted workflow: {workflow_file.name}")
+                
+                if deleted_count > 0:
+                    logger.info(f"   Deleted {deleted_count} app/testing workflows")
             
             # Generate customized PROJECT_BRIEF.md
             brief_content = await self._generate_project_brief(project_name, project_description)

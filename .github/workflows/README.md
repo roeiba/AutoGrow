@@ -4,41 +4,39 @@ Automated agents that maintain and resolve issues using Claude AI.
 
 ## Workflow Organization
 
-The workflows are organized into three categories:
+Workflows are organized by **naming convention** (GitHub Actions doesn't support subdirectories):
 
-### 📁 `core/` - Core SeedGPT Workflows
-**✅ Planted into every new project**
+### ✅ `core-*` - Core SeedGPT Workflows
+**Planted into every new project**
 
 These workflows provide the core SeedGPT functionality:
-- AI-powered issue management
-- Automated development assistance
-- Quality assurance automation
-- Business process automation
+- `core-issue-generator-agent.yml` - AI-powered issue generation
+- `core-issue-resolver-agent.yml` - Automated issue resolution
+- `core-marketing-agent.yml` - Marketing automation
+- `core-product-agent.yml` - Product management
+- `core-qa-agent.yml` - Quality assurance
+- `core-sales-agent.yml` - Sales automation
+- `core-specialized-agents.yml` - Domain-specific agents
+- `core-sanity-tests.yml` - Core sanity checks
 
-See [`core/README.md`](core/README.md) for details.
-
-### 📁 `apps/` - Template Apps Workflows
-**❌ NOT planted (deleted during planting)**
+### ❌ `apps-*` - Template Apps Workflows
+**NOT planted (deleted during planting)**
 
 CI/CD workflows for the SeedGPT template applications:
-- Seed Planter API backend
-- Seed Planter Frontend
+- `apps-seed-planter-api.yml` - Seed Planter API backend
+- `apps-seed-planter-frontend.yml` - Seed Planter Frontend
 
-These are specific to the SeedGPT template and reference the `apps/` folder which is removed when planting new projects.
+These reference the `apps/` folder which is removed when planting new projects.
 
-See [`apps/README.md`](apps/README.md) for details.
-
-### 📁 `testing/` - Development & Testing Workflows
-**❌ NOT planted (deleted during planting)**
+### ❌ `testing-*` - Development & Testing Workflows
+**NOT planted (deleted during planting)**
 
 Workflows for SeedGPT framework development:
-- Agent framework testing
-- Configuration validation
-- Template quality checks
+- `testing-test-agents.yml` - Agent framework tests
+- `testing-validate-agents.yml` - Configuration validation
+- `testing-test-agents-with-env.yml.example` - Example config
 
 These are only needed for developing the SeedGPT template itself.
-
-See [`testing/README.md`](testing/README.md) for details.
 
 ## Core Workflows
 

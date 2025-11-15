@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - 'apps/seed-planter-api/**'
-      - '.github/workflows/apps/seed-planter-api.yml'
+      - '.github/workflows/apps-seed-planter-api.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/seed-planter-api/**'
-      - '.github/workflows/apps/seed-planter-api.yml'
+      - '.github/workflows/apps-seed-planter-api.yml'
   workflow_dispatch:
 
 env:

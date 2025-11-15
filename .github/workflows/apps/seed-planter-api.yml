@@ -1,0 +1,153 @@
+name: Seed Planter API - CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/seed-planter-api/**'
+      - '.github/workflows/apps/seed-planter-api.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/seed-planter-api/**'
+      - '.github/workflows/apps/seed-planter-api.yml'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: magic-mirror-427812
+  SERVICE_NAME: seed-planter-api
+  REGION: us-central1
+  REGISTRY: gcr.io
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/seed-planter-api
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: apps/seed-planter-api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run linting
+        run: |
+          pip install ruff
+          ruff check src/ || true
+
+      - name: Run tests
+        run: |
+          # Create tests directory if it doesn't exist
+          mkdir -p tests
+          # Run tests if they exist
+          if [ -d "tests" ] && [ "$(ls -A tests)" ]; then
+            pytest tests/ -v --cov=src --cov-report=term-missing
+          else
+            echo "No tests found - skipping"
+          fi
+
+  build-and-deploy:
+    name: Build and Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker gcr.io
+
+      - name: Build Docker image
+        working-directory: apps/seed-planter-api
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 10 \
+            --memory 512Mi \
+            --cpu 1 \
+            --timeout 300 \
+            --set-env-vars "API_HOST=0.0.0.0,API_PORT=8000" \
+            --set-secrets "GITHUB_TOKEN=PAT_TOKEN:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GCP_CREDENTIALS_PATH=/tmp/gcp-creds.json" \
+            --project ${{ env.PROJECT_ID }}
+
+      - name: Get Service URL
+        id: get-url
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)' \
+            --project ${{ env.PROJECT_ID }})
+          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          echo "🚀 Deployed to: $SERVICE_URL"
+
+      - name: Test deployment
+        run: |
+          sleep 10
+          curl -f ${{ steps.get-url.outputs.url }}/ || exit 1
+          echo "✅ Deployment health check passed"
+
+    outputs:
+      service-url: ${{ steps.get-url.outputs.url }}
+
+  notify:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: always()
+
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.build-and-deploy.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+            echo "🌐 Service URL: ${{ needs.build-and-deploy.outputs.service-url }}"
+          else
+            echo "❌ Deployment failed"
+            exit 1
+          fi

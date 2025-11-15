@@ -506,6 +506,8 @@ Return as JSON array with format:
     ):
         """Send progress update via callback"""
         
+        print(f"📊 Progress Update [{project_id}]: {status.value} - {message} ({progress}%)")
+        
         if callback:
             progress_data = ProjectProgress(
                 project_id=project_id,
@@ -516,6 +518,8 @@ Return as JSON array with format:
                 **kwargs
             )
             await callback(progress_data)
+        else:
+            print(f"⚠️  No callback provided for progress update")
 
     async def get_project_details(self, project_id: str) -> Optional[ProjectDetails]:
         """Get details for a specific project"""

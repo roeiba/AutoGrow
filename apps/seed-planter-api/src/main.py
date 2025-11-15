@@ -116,12 +116,15 @@ async def plant_seed(request: PlantSeedRequest, req: Request):
             )
         )
         
-        # Return immediate response
+        # Return immediate response with correct WebSocket URL
+        ws_protocol = "wss" if req.url.scheme == "https" else "ws"
+        ws_host = req.url.netloc  # includes port if present
+        
         response = PlantSeedResponse(
             project_id=project_id,
             status=ProjectStatus.INITIALIZING,
             created_at=datetime.utcnow(),
-            websocket_url=f"ws://{req.url.hostname}:{config.api_port}/api/v1/projects/{project_id}/ws",
+            websocket_url=f"{ws_protocol}://{ws_host}/api/v1/projects/{project_id}/ws",
             estimated_completion_time=120  # ~2 minutes
         )
         

@@ -8,98 +8,71 @@ export function useSeedPlanter() {
   const [progress, setProgress] = useState(null)
   const [error, setError] = useState(null)
   const [isPlanting, setIsPlanting] = useState(false)
-  const wsRef = useRef(null)
-  const projectIdRef = useRef(null)
+  const taskIdRef = useRef(null)
+  const pollingIntervalRef = useRef(null)
 
   useEffect(() => {
-    // Cleanup WebSocket on unmount
+    // Cleanup polling on unmount
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
       }
     }
   }, [])
 
-  const connectWebSocket = (projectId) => {
-    // Convert HTTP(S) URL to WS(S) URL
-    const apiUrl = new URL(API_BASE_URL)
-    const wsProtocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${wsProtocol}//${apiUrl.host}/api/v1/projects/${projectId}/ws`
-    
-    logger.websocket(`Connecting to WebSocket: ${wsUrl}`)
-    
+  const pollTaskStatus = async (taskId) => {
     try {
-      const ws = new WebSocket(wsUrl)
+      logger.api(`GET ${API_BASE_URL}/api/v1/tasks/${taskId}`)
       
-      ws.onopen = () => {
-        logger.success('WebSocket connected successfully')
-        // Send ping to keep connection alive
-        const pingInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send('ping')
-            logger.debug('Sent ping to keep connection alive')
-          }
-        }, 30000)
-        
-        ws.pingInterval = pingInterval
+      const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${taskId}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        logger.error('Failed to fetch task status:', errorData)
+        throw new Error(errorData.detail || 'Failed to fetch task status')
       }
       
-      ws.onmessage = (event) => {
-        try {
-          // Handle plain text messages (like "pong")
-          if (event.data === 'pong') {
-            logger.debug('Received pong from server')
-            return
-          }
-          
-          // Try to parse as JSON
-          const data = JSON.parse(event.data)
-          
-          if (data.type === 'pong') {
-            logger.debug('Received pong from server')
-            return // Ignore pong messages
-          }
-          
-          logger.progress(data.message || 'Progress update', data.progress_percent || 0, data)
-          setProgress(data)
-          
-          // Close connection when completed or failed
-          if (data.status === 'completed' || data.status === 'failed') {
-            setIsPlanting(false)
-            if (data.status === 'failed') {
-              logger.error('Project planting failed:', data.message)
-              setError(data.message || 'Project planting failed')
-            } else {
-              logger.success('Project planted successfully!', data)
-            }
-            setTimeout(() => {
-              ws.close()
-            }, 1000)
-          }
-        } catch (err) {
-          logger.error('Failed to parse WebSocket message:', err, 'Raw data:', event.data)
-        }
-      }
+      const data = await response.json()
+      logger.progress(data.message || 'Progress update', data.progress_percent || 0, data)
+      setProgress(data)
       
-      ws.onerror = (error) => {
-        logger.error('WebSocket error:', error)
-        setError('Connection error. Please try again.')
+      // Stop polling when completed or failed
+      if (data.status === 'completed' || data.status === 'failed') {
         setIsPlanting(false)
-      }
-      
-      ws.onclose = () => {
-        logger.websocket('WebSocket connection closed')
-        if (ws.pingInterval) {
-          clearInterval(ws.pingInterval)
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        
+        if (data.status === 'failed') {
+          logger.error('Project planting failed:', data.error_message || data.message)
+          setError(data.error_message || data.message || 'Project planting failed')
+        } else {
+          logger.success('Project planted successfully!', data)
         }
       }
-      
-      wsRef.current = ws
     } catch (err) {
-      logger.error('Failed to create WebSocket:', err)
-      setError('Failed to establish connection')
+      logger.error('Failed to poll task status:', err)
+      setError(err.message || 'Failed to check task status')
       setIsPlanting(false)
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
     }
+  }
+  
+  const startPolling = (taskId) => {
+    logger.info(`Starting to poll task status: ${taskId}`)
+    taskIdRef.current = taskId
+    
+    // Poll immediately
+    pollTaskStatus(taskId)
+    
+    // Then poll every 2 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      pollTaskStatus(taskId)
+    }, 2000)
   }
 
   const plantProject = async (projectDescription) => {
@@ -145,12 +118,12 @@ export function useSeedPlanter() {
       }
 
       const data = await response.json()
-      projectIdRef.current = data.project_id
-      logger.success(`Project created with ID: ${data.project_id}`)
+      taskIdRef.current = data.task_id
+      logger.success(`Task created with ID: ${data.task_id}`)
       logger.debug('Response data:', data)
 
-      // Connect to WebSocket for real-time updates
-      connectWebSocket(data.project_id)
+      // Start polling for task status
+      startPolling(data.task_id)
 
     } catch (err) {
       logger.error('Failed to plant seed:', err)

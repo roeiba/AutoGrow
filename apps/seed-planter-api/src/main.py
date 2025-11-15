@@ -286,6 +286,53 @@ async def plant_seed(
         raise HTTPException(status_code=500, detail=f"Failed to plant seed: {str(e)}")
 
 
+@app.get("/api/v1/tasks/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(task_id: str):
+    """
+    Get the status of a project creation task
+    
+    Poll this endpoint to check the progress of your project creation.
+    The task will include progress updates and final results when completed.
+    """
+    
+    logger.debug(f"📊 Task status request for: {task_id}")
+    
+    # Get task data from Redis
+    task_data = await task_storage.get_task(task_id)
+    
+    if not task_data:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Get latest progress
+    progress_data = await task_storage.get_progress(task_id)
+    
+    # Merge task and progress data
+    if progress_data:
+        task_data.update(progress_data)
+    
+    # Convert status string to enum
+    status = ProjectStatus(task_data.get("status", "initializing"))
+    
+    response = TaskStatusResponse(
+        task_id=task_id,
+        status=status,
+        message=task_data.get("message", "Processing..."),
+        progress_percent=task_data.get("progress_percent", 0),
+        project_id=task_data.get("project_id"),
+        project_name=task_data.get("project_name"),
+        org_url=task_data.get("org_url"),
+        repo_url=task_data.get("repo_url"),
+        deployment_url=task_data.get("deployment_url"),
+        gcp_project_id=task_data.get("gcp_project_id"),
+        error_message=task_data.get("error_message"),
+        created_at=task_data.get("created_at"),
+        updated_at=task_data.get("updated_at"),
+        completed_at=task_data.get("completed_at")
+    )
+    
+    return response
+
+
 @app.get("/api/v1/projects/{project_id}", response_model=ProjectDetails)
 async def get_project(project_id: str):
     """Get details for a specific project"""

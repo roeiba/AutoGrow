@@ -11,15 +11,15 @@ on:
     paths:
       - '.github/workflows/marketing-agent.yml'
       - '.github/workflows/specialized-agents.yml'
-      - 'src/agents/marketing_agent.py'
-      - 'src/agents/base_issue_agent.py'
+      - 'seedgpt-core/src/agents/marketing_agent.py'
+      - 'seedgpt-core/src/agents/base_issue_agent.py'
 
   pull_request:
     paths:
       - '.github/workflows/marketing-agent.yml'
       - '.github/workflows/specialized-agents.yml'
-      - 'src/agents/marketing_agent.py'
-      - 'src/agents/base_issue_agent.py'
+      - 'seedgpt-core/src/agents/marketing_agent.py'
+      - 'seedgpt-core/src/agents/base_issue_agent.py'
 
   workflow_dispatch:
     inputs:

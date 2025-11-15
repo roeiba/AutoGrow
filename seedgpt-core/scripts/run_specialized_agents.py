@@ -38,8 +38,17 @@ def get_env_var(name: str, required: bool = True) -> str:
     """Get environment variable with error handling"""
     value = os.getenv(name)
     if required and not value:
-        logger.error(f"Missing required environment variable: {name}")
-        sys.exit(1)
+        print("\n" + "="*80)
+        print("⏭️  SKIPPING: Specialized Agents")
+        print("="*80)
+        print(f"\n📋 This workflow requires the environment variable: {name}")
+        print("\n💡 These are typically not available in forked repositories.")
+        print("   This is expected behavior and not an error.")
+        print("\n🔒 Repository owners can configure these secrets in:")
+        print("   Settings → Secrets and variables → Actions")
+        print("="*80 + "\n")
+        logger.info(f"Skipping execution due to missing environment variable: {name} (expected in forks)")
+        sys.exit(0)
     return value
 
 

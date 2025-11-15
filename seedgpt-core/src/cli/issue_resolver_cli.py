@@ -60,11 +60,19 @@ def main():
     DRY_MODE = os.getenv('DRY_MODE', 'false').lower() in ('true', '1', 'yes')
 
     if not GITHUB_TOKEN or not REPO_NAME:
-        logger.error("Missing required environment variables", extra={
-            "has_github_token": bool(GITHUB_TOKEN),
-            "has_repo_name": bool(REPO_NAME)
-        })
-        raise MissingEnvironmentVariableError("GITHUB_TOKEN or REPO_NAME")
+        print("\n" + "="*80)
+        print("⏭️  SKIPPING: Issue Resolver Agent")
+        print("="*80)
+        print("\n📋 This workflow requires the following environment variables:")
+        print("   • GITHUB_TOKEN - GitHub API access token")
+        print("   • REPO_NAME - Repository name (owner/repo)")
+        print("\n💡 These are typically not available in forked repositories.")
+        print("   This is expected behavior and not an error.")
+        print("\n🔒 Repository owners can configure these secrets in:")
+        print("   Settings → Secrets and variables → Actions")
+        print("="*80 + "\n")
+        logger.info("Skipping execution due to missing environment variables (expected in forks)")
+        sys.exit(0)
 
     # Initialize GitHub client with retry using shared utility
     try:

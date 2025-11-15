@@ -171,15 +171,14 @@ class ProjectBriefValidator:
 
         result.metadata["sections_found"] = headers
 
-        # Check required sections - simple case-insensitive matching
+        # Check required sections - just search for section name case-insensitively
         for required_section in self.REQUIRED_SECTIONS:
-            # Just search for the section name in any ## heading
-            if not re.search(rf"##.*?{re.escape(required_section)}", content, re.IGNORECASE):
+            if required_section.lower() not in content.lower():
                 result.add_error(f"Missing required section: '{required_section}'")
 
         # Check recommended sections
         for recommended_section in self.RECOMMENDED_SECTIONS:
-            if not re.search(rf"##.*?{re.escape(recommended_section)}", content, re.IGNORECASE):
+            if recommended_section.lower() not in content.lower():
                 result.add_warning(
                     f"Missing recommended section: '{recommended_section}'"
                 )
@@ -216,9 +215,13 @@ class ProjectBriefValidator:
 
     def _validate_overview_section(self, content: str, result: ValidationResult):
         """Validate Project Overview section"""
-        # Simple case-insensitive search for "Project Overview"
+        # Just search for "project overview" case-insensitively
+        if "project overview" not in content.lower():
+            result.add_warning("Could not find Project Overview section - skipping detailed validation")
+            return
+            
         overview_match = re.search(
-            r"##.*?project overview.*?\n(.*?)(?=\n##|\Z)",
+            r"project overview.*?\n(.*?)(?=\n##|\Z)",
             content,
             re.DOTALL | re.IGNORECASE,
         )
@@ -264,9 +267,13 @@ class ProjectBriefValidator:
 
     def _validate_requirements_section(self, content: str, result: ValidationResult):
         """Validate Core Requirements section"""
-        # Simple case-insensitive search for "Core Requirements"
+        # Just search for "core requirements" case-insensitively
+        if "core requirements" not in content.lower():
+            result.add_warning("Could not find Core Requirements section - skipping detailed validation")
+            return
+            
         requirements_match = re.search(
-            r"##.*?core requirements.*?\n(.*?)(?=\n##|\Z)",
+            r"core requirements.*?\n(.*?)(?=\n##|\Z)",
             content,
             re.DOTALL | re.IGNORECASE,
         )
@@ -327,10 +334,10 @@ class ProjectBriefValidator:
         # Skip empty section check - AI can handle free-form text and various formats
 
         # Check completion checklist if exists
-        if re.search(r"##.*?completion checklist", content, re.IGNORECASE):
+        if "completion checklist" in content.lower():
             # Check if checklist items are marked complete
             checklist_match = re.search(
-                r"##.*?completion checklist.*?\n(.*?)(?=\n##|\Z)",
+                r"completion checklist.*?\n(.*?)(?=\n##|\Z)",
                 content,
                 re.DOTALL | re.IGNORECASE,
             )

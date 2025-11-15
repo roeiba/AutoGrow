@@ -209,10 +209,12 @@ class PRFailureResolver:
                 raise github_error
 
         logger.info("Mode: Searching for failing PR")
-        logger.info("Criteria: state=open, checks=failing")
+        logger.info("Criteria: state=open, checks=failing OR merge conflicts")
 
         try:
             open_prs = get_open_pull_requests(self.repo)
+            open_prs_list = list(open_prs)
+            logger.info(f"Found {len(open_prs_list)} open PR(s) to check")
         except Exception as e:
             github_error = get_exception_for_github_error(e, "Failed to get open PRs")
             logger.exception(f"Failed to get open PRs: {github_error}")
@@ -221,10 +223,15 @@ class PRFailureResolver:
         prs_checked = 0
         for pr in open_prs:
             prs_checked += 1
+            
+            logger.info(f"\n📋 Checking PR #{pr.number}: {pr.title}")
+            logger.info(f"   Author: {pr.user.login}")
+            logger.info(f"   Branch: {pr.head.ref} → {pr.base.ref}")
+            logger.info(f"   Draft: {pr.draft}")
 
             # Skip draft PRs
             if pr.draft:
-                logger.debug(f"Skipping #{pr.number}: Is a draft PR")
+                logger.info(f"   ⏭️  SKIPPED: Is a draft PR")
                 continue
 
             # Check if already claimed by this agent
@@ -232,14 +239,14 @@ class PRFailureResolver:
                 comments = list(get_pr_comments(pr))
             except Exception as e:
                 github_error = get_exception_for_github_error(e, f"Failed to get comments for PR #{pr.number}")
-                logger.warning(f"Failed to get comments for PR #{pr.number}: {github_error}")
+                logger.warning(f"   ⚠️  Failed to get comments: {github_error}")
                 continue
 
             if any(
                 "PR Failure Resolver Agent" in c.body and "working on" in c.body.lower()
                 for c in comments
             ):
-                logger.debug(f"Skipping #{pr.number}: Already claimed by agent")
+                logger.info(f"   ⏭️  SKIPPED: Already claimed by agent")
                 continue
 
             # Check if PR has failing checks or merge conflicts
@@ -247,21 +254,29 @@ class PRFailureResolver:
                 # Check for merge conflicts
                 has_merge_conflict = False
                 mergeable_state = pr.mergeable_state
-                logger.debug(f"PR #{pr.number} mergeable_state: {mergeable_state}")
+                logger.info(f"   Mergeable State: {mergeable_state}")
                 
                 if mergeable_state in ['dirty', 'conflicting']:
                     has_merge_conflict = True
-                    logger.debug(f"PR #{pr.number} has merge conflicts")
+                    logger.info(f"   🔴 MERGE CONFLICT DETECTED")
                 
                 # Check for failing check runs
                 checks = get_pr_checks(pr)
-                has_check_failures = any(
-                    check.conclusion in ['failure', 'timed_out', 'action_required']
-                    for check in checks
-                )
+                logger.info(f"   Check Runs: {len(checks)} total")
                 
-                if has_check_failures:
-                    logger.debug(f"PR #{pr.number} has failing checks")
+                failing_checks = []
+                for check in checks:
+                    if check.conclusion in ['failure', 'timed_out', 'action_required']:
+                        failing_checks.append(f"{check.name} ({check.conclusion})")
+                        logger.info(f"      🔴 {check.name}: {check.conclusion}")
+                    elif check.conclusion == 'success':
+                        logger.info(f"      ✅ {check.name}: success")
+                    elif check.conclusion is None:
+                        logger.info(f"      ⏳ {check.name}: in_progress")
+                    else:
+                        logger.info(f"      ⚪ {check.name}: {check.conclusion}")
+                
+                has_check_failures = len(failing_checks) > 0
                 
                 # Check combined status (for older-style status checks)
                 has_status_failures = False
@@ -270,15 +285,20 @@ class PRFailureResolver:
                     if commits:
                         latest_commit = commits[-1]
                         combined_status = latest_commit.get_combined_status()
+                        logger.info(f"   Combined Status: {combined_status.state}")
+                        
                         if combined_status.state in ['failure', 'error']:
                             has_status_failures = True
-                            logger.debug(f"PR #{pr.number} has failing status checks")
+                            logger.info(f"   🔴 STATUS CHECK FAILURES DETECTED")
+                            for status in combined_status.statuses:
+                                if status.state in ['failure', 'error']:
+                                    logger.info(f"      🔴 {status.context}: {status.state}")
                 except Exception as status_err:
-                    logger.debug(f"Could not check combined status for PR #{pr.number}: {status_err}")
+                    logger.debug(f"   Could not check combined status: {status_err}")
                 
                 # Select PR if it has any type of failure
                 if not (has_merge_conflict or has_check_failures or has_status_failures):
-                    logger.debug(f"Skipping #{pr.number}: No failures detected")
+                    logger.info(f"   ✅ SKIPPED: No failures detected (all checks passing)")
                     continue
 
                 # Determine failure reason
@@ -286,22 +306,23 @@ class PRFailureResolver:
                 if has_merge_conflict:
                     failure_reasons.append("merge conflicts")
                 if has_check_failures:
-                    failure_reasons.append("failing checks")
+                    failure_reasons.append(f"failing checks ({len(failing_checks)})")
                 if has_status_failures:
                     failure_reasons.append("failing status")
                 
-                logger.info(f"SELECTED: PR #{pr.number}")
-                logger.info(f"Title: {pr.title}")
-                logger.info(f"Branch: {pr.head.ref}")
-                logger.info(f"Reason: {', '.join(failure_reasons)} (checked {prs_checked} PRs total)")
+                logger.info(f"\n🎯 SELECTED: PR #{pr.number}")
+                logger.info(f"   Title: {pr.title}")
+                logger.info(f"   Branch: {pr.head.ref}")
+                logger.info(f"   Failures: {', '.join(failure_reasons)}")
+                logger.info(f"   Total PRs checked: {prs_checked}")
                 return pr
 
             except Exception as e:
                 github_error = get_exception_for_github_error(e, f"Failed to check PR #{pr.number} status")
-                logger.warning(f"Failed to check PR #{pr.number} status: {github_error}")
+                logger.warning(f"   ⚠️  Failed to check status: {github_error}")
                 continue
 
-        logger.warning(f"No failing PRs found (checked {prs_checked} PRs)")
+        logger.warning(f"\n❌ No failing PRs found (checked {prs_checked} PRs)")
         return None
 
     def _claim_pr(self, pr) -> bool:

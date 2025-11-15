@@ -262,7 +262,7 @@ jobs:
     name: Notify Deployment
     runs-on: ubuntu-latest
     needs: [build-and-deploy, verify-deployment]
-    if: always() && needs.build-and-deploy.result != 'skipped'
+    if: always() && needs.build-and-deploy.result != 'skipped' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Deployment Status

@@ -3,16 +3,16 @@
 Issue Resolver Agent - GitHub Actions Wrapper
 
 Thin wrapper script for GitHub Actions workflows.
-Core logic is in src/agents/issue_resolver.py
+Core logic is in seedgpt-core/src/agents/issue_resolver.py
 """
 
 import os
 import sys
 from pathlib import Path
 
-# Add src directory to path FIRST before any other imports
+# Add seedgpt-core/src directory to path FIRST before any other imports
 project_root = Path(__file__).parent.parent.parent
-src_dir = project_root / 'src'
+src_dir = project_root / 'seedgpt-core' / 'src'
 sys.path.insert(0, str(src_dir))
 
 print(f"🔍 Python path configured:")

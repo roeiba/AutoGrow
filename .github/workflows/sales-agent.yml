@@ -11,15 +11,15 @@ on:
     paths:
       - '.github/workflows/sales-agent.yml'
       - '.github/workflows/specialized-agents.yml'
-      - 'src/agents/sales_agent.py'
-      - 'src/agents/base_issue_agent.py'
+      - 'seedgpt-core/src/agents/sales_agent.py'
+      - 'seedgpt-core/src/agents/base_issue_agent.py'
 
   pull_request:
     paths:
       - '.github/workflows/sales-agent.yml'
       - '.github/workflows/specialized-agents.yml'
-      - 'src/agents/sales_agent.py'
-      - 'src/agents/base_issue_agent.py'
+      - 'seedgpt-core/src/agents/sales_agent.py'
+      - 'seedgpt-core/src/agents/base_issue_agent.py'
 
   workflow_dispatch:
     inputs:

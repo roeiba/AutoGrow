@@ -259,10 +259,23 @@ class SeedPlanter:
         repo_path = workspace / "repo"
         
         try:
-            # Delete apps folder
+            # Delete apps folder (seed-planter apps not needed in planted projects)
             apps_path = repo_path / "apps"
             if apps_path.exists():
                 shutil.rmtree(apps_path)
+                logger.info("   Deleted apps/ folder")
+            
+            # Delete app-specific workflows (they reference deleted apps)
+            apps_workflows_path = repo_path / ".github" / "workflows" / "apps"
+            if apps_workflows_path.exists():
+                shutil.rmtree(apps_workflows_path)
+                logger.info("   Deleted .github/workflows/apps/ folder")
+            
+            # Delete testing workflows (only needed for SeedGPT development)
+            testing_workflows_path = repo_path / ".github" / "workflows" / "testing"
+            if testing_workflows_path.exists():
+                shutil.rmtree(testing_workflows_path)
+                logger.info("   Deleted .github/workflows/testing/ folder")
             
             # Generate customized PROJECT_BRIEF.md
             brief_content = await self._generate_project_brief(project_name, project_description)

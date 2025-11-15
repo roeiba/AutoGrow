@@ -1,8 +1,46 @@
 # GitHub Workflow Agents
 
-Two automated agents that maintain and resolve issues using Claude AI.
+Automated agents that maintain and resolve issues using Claude AI.
 
-## Workflows
+## Workflow Organization
+
+The workflows are organized into three categories:
+
+### 📁 `core/` - Core SeedGPT Workflows
+**✅ Planted into every new project**
+
+These workflows provide the core SeedGPT functionality:
+- AI-powered issue management
+- Automated development assistance
+- Quality assurance automation
+- Business process automation
+
+See [`core/README.md`](core/README.md) for details.
+
+### 📁 `apps/` - Template Apps Workflows
+**❌ NOT planted (deleted during planting)**
+
+CI/CD workflows for the SeedGPT template applications:
+- Seed Planter API backend
+- Seed Planter Frontend
+
+These are specific to the SeedGPT template and reference the `apps/` folder which is removed when planting new projects.
+
+See [`apps/README.md`](apps/README.md) for details.
+
+### 📁 `testing/` - Development & Testing Workflows
+**❌ NOT planted (deleted during planting)**
+
+Workflows for SeedGPT framework development:
+- Agent framework testing
+- Configuration validation
+- Template quality checks
+
+These are only needed for developing the SeedGPT template itself.
+
+See [`testing/README.md`](testing/README.md) for details.
+
+## Core Workflows
 
 ### 1. Issue Generator Agent (`issue-generator-agent.yml`)
 

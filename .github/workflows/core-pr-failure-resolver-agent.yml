@@ -1,0 +1,80 @@
+name: PR Failure Resolver Agent
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Run every 15 minutes
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Specific PR number (optional)'
+        required: false
+
+env:
+  MAX_EXECUTION_TIME: ${{ vars.MAX_EXECUTION_TIME || '8' }}
+
+jobs:
+  resolve-pr-failure:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-failure-resolver
+      cancel-in-progress: false
+    
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+      checks: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}  # Use PAT with workflow scope
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Claude CLI Agent
+        run: |
+          echo "🔍 Attempting to install Claude CLI agent..."
+          npm install -g @anthropic-ai/claude-code 2>&1 || {
+            echo "⚠️  Claude CLI not available via npm - will use Anthropic SDK fallback"
+            echo "   Note: Claude CLI may require manual installation from https://code.claude.com/"
+          }
+          # Check if claude command is available
+          if command -v claude &> /dev/null; then
+            echo "✅ Claude CLI installed successfully"
+            claude --version || echo "⚠️  Claude CLI installed but version check failed"
+          else
+            echo "ℹ️  Claude CLI not available - agents will use Anthropic SDK"
+          fi
+      
+      - name: Install Python dependencies
+        run: |
+          pip install -r seedgpt-core/src/requirements.txt
+          echo "✅ Python dependencies installed"
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "PR Failure Resolver Agent"
+          git config --global user.email "agent@github-actions.bot"
+      
+      - name: Run PR failure resolver
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPO_NAME: ${{ github.repository }}
+          SPECIFIC_PR: ${{ github.event.inputs.pr_number }}
+          # Claude CLI configuration
+          DISABLE_TELEMETRY: "1"
+          DISABLE_ERROR_REPORTING: "1"
+          DISABLE_AUTOUPDATER: "1"
+        run: python seedgpt-core/src/cli/pr_failure_resolver_cli.py

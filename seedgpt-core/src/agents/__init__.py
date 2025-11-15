@@ -4,6 +4,7 @@ AI Agents Package
 Core agent implementations for GitHub automation:
 - IssueGenerator: Generates new issues using AI
 - IssueResolver: Resolves issues and creates PRs
+- PRFailureResolver: Fixes failing PR checks and updates PRs
 - QAAgent: Monitors repository health
 
 Specialized Issue Agents:
@@ -15,6 +16,7 @@ Specialized Issue Agents:
 
 from .issue_generator import IssueGenerator
 from .issue_resolver import IssueResolver
+from .pr_failure_resolver import PRFailureResolver
 from .qa_agent import QAAgent
 from .base_issue_agent import BaseIssueAgent, AgentConfig
 from .marketing_agent import MarketingAgent
@@ -24,6 +26,7 @@ from .sales_agent import SalesAgent
 __all__ = [
     "IssueGenerator",
     "IssueResolver",
+    "PRFailureResolver",
     "QAAgent",
     "BaseIssueAgent",
     "AgentConfig",

@@ -32,6 +32,38 @@ def create_branch(git_repo: git.Repo, branch_name: str) -> None:
         raise error
 
 
+def checkout_branch(git_repo: git.Repo, branch_name: str, remote_name: str = "origin") -> None:
+    """
+    Checkout an existing branch (fetch from remote if needed)
+    
+    Args:
+        git_repo: GitPython Repo object
+        branch_name: Name of the branch to checkout
+        remote_name: Name of the remote (default: "origin")
+        
+    Raises:
+        BranchError: If checkout fails
+    """
+    try:
+        # Fetch latest from remote
+        origin = git_repo.remote(remote_name)
+        origin.fetch()
+        
+        # Try to checkout the branch
+        try:
+            git_repo.git.checkout(branch_name)
+            logger.info(f"Checked out branch '{branch_name}'")
+        except git.GitCommandError:
+            # Branch doesn't exist locally, try to create from remote
+            git_repo.git.checkout("-b", branch_name, f"{remote_name}/{branch_name}")
+            logger.info(f"Checked out branch '{branch_name}' from {remote_name}")
+            
+    except git.GitCommandError as e:
+        error = BranchError(f"Failed to checkout branch {branch_name}: {e}")
+        logger.exception(f"Failed to checkout branch: {error}")
+        raise error
+
+
 def is_repo_dirty(git_repo: git.Repo, include_untracked: bool = True) -> bool:
     """
     Check if repository has uncommitted changes

@@ -203,3 +203,83 @@ def create_pull_request(repo, title: str, body: str, head: str, base: str = "mai
         raise e
     
     return repo.create_pull(title=title, body=body, head=head, base=base)
+
+
+@retry_github_api
+def get_pull_request(repo, pr_number: int):
+    """
+    Get a specific pull request by number
+    
+    Args:
+        repo: PyGithub Repository object
+        pr_number: PR number to fetch
+    
+    Returns:
+        PullRequest: Pull request object
+    """
+    return repo.get_pull(pr_number)
+
+
+@retry_github_api
+def get_open_pull_requests(repo):
+    """
+    Get open pull requests from a GitHub repository
+    
+    Args:
+        repo: PyGithub Repository object
+    
+    Returns:
+        PaginatedList: Paginated list of open pull requests
+    """
+    return repo.get_pulls(state="open", sort="created", direction="asc")
+
+
+@retry_github_api
+def get_pr_checks(pr):
+    """
+    Get check runs for a pull request
+    
+    Args:
+        pr: PyGithub PullRequest object
+    
+    Returns:
+        List: List of check run objects
+    """
+    # Get the latest commit
+    commits = list(pr.get_commits())
+    if not commits:
+        return []
+    
+    latest_commit = commits[-1]
+    
+    # Get check runs for the commit
+    check_runs = latest_commit.get_check_runs()
+    return list(check_runs)
+
+
+@retry_github_api
+def get_pr_files(pr):
+    """
+    Get files changed in a pull request
+    
+    Args:
+        pr: PyGithub PullRequest object
+    
+    Returns:
+        List: List of file objects
+    """
+    return list(pr.get_files())
+
+
+@retry_github_api
+def get_pr_comments(pr):
+    """
+    Get comments on a pull request
+    
+    Args:
+        pr: PyGithub PullRequest object
+    
+    Returns:
+        List: List of issue comment objects
+    """
+    return list(pr.get_issue_comments())

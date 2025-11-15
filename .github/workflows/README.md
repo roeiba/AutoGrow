@@ -12,6 +12,7 @@ Workflows are organized by **naming convention** (GitHub Actions doesn't support
 These workflows provide the core SeedGPT functionality:
 - `core-issue-generator-agent.yml` - AI-powered issue generation
 - `core-issue-resolver-agent.yml` - Automated issue resolution
+- `core-pr-failure-resolver-agent.yml` - Automated PR failure resolution
 - `core-marketing-agent.yml` - Marketing automation
 - `core-product-agent.yml` - Product management
 - `core-qa-agent.yml` - Quality assurance
@@ -94,6 +95,36 @@ gh workflow run issue-resolver.yml -f issue_number=42
 
 # Auto-select issue:
 gh workflow run issue-resolver.yml
+```
+
+### 3. PR Failure Resolver Agent (`pr-failure-resolver-agent.yml`)
+
+**Purpose**: Automatically fixes failing PR checks by analyzing failures with Claude AI and pushing fixes.
+
+**Schedule**: Every 15 minutes (singleton - no overlapping executions)
+
+**What it does**:
+1. Finds an open PR with failing checks
+2. Claims the PR (adds comment)
+3. Analyzes the failure details with Claude AI
+4. Implements fixes for the failures
+5. Commits and pushes changes to the PR branch
+6. Updates the PR with fix details
+7. CI/CD re-runs automatically
+
+**Configuration**:
+```yaml
+# Repository variables
+MAX_EXECUTION_TIME: 8  # Max minutes per run
+```
+
+**Manual trigger**:
+```bash
+# Fix specific PR:
+gh workflow run pr-failure-resolver-agent.yml -f pr_number=42
+
+# Auto-select failing PR:
+gh workflow run pr-failure-resolver-agent.yml
 ```
 
 ## Setup

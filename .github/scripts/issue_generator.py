@@ -3,7 +3,7 @@
 Issue Generator Agent - GitHub Actions Wrapper
 
 Thin wrapper script for GitHub Actions workflows.
-Core logic is in src/agents/issue_generator.py
+Core logic is in seedgpt-core/src/agents/issue_generator.py
 """
 
 import os
@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from github import Github, Auth
 
-# Add src directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
+# Add seedgpt-core/src directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'seedgpt-core' / 'src'))
 
 # Import core agent and utilities
 from agents.issue_generator import IssueGenerator

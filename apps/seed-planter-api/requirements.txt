@@ -17,6 +17,7 @@ google-auth==2.35.0
 # Database
 sqlalchemy==2.0.23
 alembic==1.13.1
+psycopg2-binary==2.9.9  # PostgreSQL adapter for Cloud SQL
 
 # Authentication & Security
 python-jose[cryptography]==3.3.0

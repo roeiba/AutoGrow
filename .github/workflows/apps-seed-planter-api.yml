@@ -157,8 +157,9 @@ jobs:
             --cpu 1 \
             --timeout 300 \
             --port 8080 \
+            --add-cloudsql-instances "${{ env.PROJECT_ID }}:${{ env.REGION }}:seedgpt-db" \
             --set-env-vars "GCP_PROJECT_ID=${{ env.PROJECT_ID }},GITHUB_TOKEN=${GITHUB_TOKEN_VALUE},GITHUB_USERNAME=roeiba,ANTHROPIC_API_KEY=${ANTHROPIC_KEY_VALUE},GCP_CREDENTIALS_PATH=/tmp/gcp-creds.json" \
-            --update-secrets "GCP_CREDENTIALS=GCP_CREDENTIALS:latest,GITHUB_OAUTH_CLIENT_SECRET=GITHUB_OAUTH_CLIENT_SECRET:latest" \
+            --update-secrets "GCP_CREDENTIALS=GCP_CREDENTIALS:latest,GITHUB_OAUTH_CLIENT_SECRET=GITHUB_OAUTH_CLIENT_SECRET:latest,DATABASE_URL=DATABASE_URL:latest" \
             --project ${{ env.PROJECT_ID }}
 
       - name: Get Service URL

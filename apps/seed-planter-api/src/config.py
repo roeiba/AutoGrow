@@ -69,8 +69,9 @@ class SeedPlanterConfig(BaseSettings):
     # Database Configuration
     database_url: str = Field(
         "sqlite:///./seedgpt.db",
-        description="Database connection URL (SQLite default, use PostgreSQL for production)"
+        description="Database connection URL (SQLite for local dev, PostgreSQL for production)"
     )
+    # Note: In production, DATABASE_URL will be injected from Secret Manager via Cloud Run
 
     # Authentication Configuration
     secret_key: str = Field(

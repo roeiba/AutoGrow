@@ -129,11 +129,20 @@ jobs:
           echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
           echo "🚀 Deployed to: $SERVICE_URL"
 
-      - name: Test deployment
+      - name: Wait for service to be ready
         run: |
-          sleep 10
-          curl -f ${{ steps.get-url.outputs.url }}/ || exit 1
-          echo "✅ Deployment health check passed"
+          echo "⏳ Waiting for service to be ready..."
+          sleep 15
+
+      - name: Run post-deployment tests
+        env:
+          API_BASE_URL: ${{ steps.get-url.outputs.url }}
+        working-directory: apps/seed-planter-api
+        run: |
+          echo "🧪 Running post-deployment verification tests..."
+          pip install pytest pytest-asyncio httpx websockets
+          pytest tests/test_health.py tests/test_projects_api.py -v --tb=short
+          echo "✅ All post-deployment tests passed!"
 
     outputs:
       service-url: ${{ steps.get-url.outputs.url }}

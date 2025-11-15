@@ -339,12 +339,13 @@ if __name__ == "__main__":
     import uvicorn
     import os
     
-    # Cloud Run uses PORT environment variable
-    port = int(os.getenv("PORT", config.api_port))
+    # Cloud Run uses PORT environment variable (defaults to 8080)
+    # Always prioritize PORT over API_PORT for Cloud Run compatibility
+    port = int(os.getenv("PORT", "8080"))
     
     uvicorn.run(
         app,
-        host=config.api_host,
+        host="0.0.0.0",
         port=port,
         log_level="info" if not config.api_debug else "debug"
     )

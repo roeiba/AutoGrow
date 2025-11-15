@@ -224,11 +224,9 @@
                 const data = await response.json();
                 return data.access_token;
             } else {
-                // Fallback: Show instructions for manual token creation
-                throw new Error(
-                    'OAuth proxy not configured. Please create a Personal Access Token manually at ' +
-                    'https://github.com/settings/tokens/new with "public_repo" scope and use the manual setup.'
-                );
+                // Fallback: Redirect to PAT setup instead of showing error
+                window.location.href = 'guided-setup.html?method=token&reason=oauth_proxy_missing';
+                throw new Error('Redirecting to manual setup...');
             }
         }
 

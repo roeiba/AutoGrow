@@ -291,9 +291,9 @@
                 <div class="option-card" onclick="selectMethod('oauth')" id="oauth-option">
                     <h3>
                         🔐 GitHub OAuth
-                        <span class="badge automated">AUTOMATED</span>
+                        <span class="badge warning">REQUIRES SETUP</span>
                     </h3>
-                    <p>Authenticate with GitHub and automatically fork the repository. Quick and secure setup with one click.</p>
+                    <p>Authenticate with GitHub and automatically fork the repository. Requires OAuth proxy backend configuration.</p>
                 </div>
 
                 <div class="option-card" onclick="selectMethod('token')" id="token-option">
@@ -463,6 +463,28 @@
         const REDIRECT_URI = window.location.origin + '/SeedGPT/oauth-callback.html';
 
         let selectedMethod = null;
+
+        // Check if redirected from OAuth callback
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const method = urlParams.get('method');
+            const reason = urlParams.get('reason');
+            
+            if (method === 'token' && reason === 'oauth_proxy_missing') {
+                // Auto-select token method and show explanation
+                selectMethod('token');
+                proceedWithMethod();
+                
+                // Show info message
+                const infoBox = document.createElement('div');
+                infoBox.className = 'info-box';
+                infoBox.innerHTML = `
+                    <h4>ℹ️ OAuth Setup Incomplete</h4>
+                    <p>The OAuth flow requires a backend proxy to be configured. Please use a Personal Access Token instead for a secure, direct setup.</p>
+                `;
+                document.querySelector('#tokenFlow .steps').insertAdjacentElement('beforebegin', infoBox);
+            }
+        });
 
         function selectMethod(method) {
             selectedMethod = method;

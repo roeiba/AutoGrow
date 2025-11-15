@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Authentication - SeedGPT</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .spinner {
+            border: 4px solid rgba(102, 126, 234, 0.3);
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            color: #666;
+            margin-top: 20px;
+            font-size: 1rem;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .success {
+            background: #4CAF50;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .step {
+            text-align: left;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .step-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .step-status {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .checkmark {
+            color: #4CAF50;
+            font-size: 1.2rem;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Setting Up Your Project</h1>
+        <div class="spinner" id="spinner"></div>
+        <div class="status" id="status">Authenticating with GitHub...</div>
+        
+        <div id="steps" style="display: none;">
+            <div class="step" id="step1">
+                <div class="step-title"><span class="checkmark" style="display: none;">✓</span>Authenticating</div>
+                <div class="step-status">Verifying your GitHub credentials...</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-title"><span class="checkmark" style="display: none;">✓</span>Forking Repository</div>
+                <div class="step-status">Creating your own copy of SeedGPT...</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-title"><span class="checkmark" style="display: none;">✓</span>Configuring Workflows</div>
+                <div class="step-status">Setting up GitHub Actions...</div>
+            </div>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const GITHUB_CLIENT_ID = 'Ov23liHWdpJUFKDq8Gxd'; // TODO: Replace with your actual Client ID
+        const REPO_OWNER = 'roeiba';
+        const REPO_NAME = 'SeedGPT';
+        
+        // OAuth proxy endpoint - you need to deploy this
+        // For now, we'll use GitHub's device flow as fallback
+        const OAUTH_PROXY_URL = null; // TODO: Set up OAuth proxy endpoint
+
+        async function handleOAuthCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const state = urlParams.get('state');
+            const error = urlParams.get('error');
+            const errorDescription = urlParams.get('error_description');
+
+            // Check for errors
+            if (error) {
+                showError(`Authentication failed: ${errorDescription || error}`);
+                return;
+            }
+
+            if (!code) {
+                showError('No authorization code received. Please try again.');
+                return;
+            }
+
+            // Verify state to prevent CSRF
+            const savedState = sessionStorage.getItem('oauth_state');
+            if (state !== savedState) {
+                showError('Invalid state parameter. Possible CSRF attack detected.');
+                return;
+            }
+
+            // Show progress steps
+            document.getElementById('steps').style.display = 'block';
+
+            try {
+                // Step 1: Exchange code for token
+                updateStep('step1', 'in-progress');
+                const token = await exchangeCodeForToken(code);
+                updateStep('step1', 'completed');
+
+                // Step 2: Fork the repository
+                updateStep('step2', 'in-progress');
+                const forkData = await forkRepository(token);
+                updateStep('step2', 'completed');
+
+                // Step 3: Enable workflows (optional)
+                updateStep('step3', 'in-progress');
+                await enableWorkflows(token, forkData.owner.login, forkData.name);
+                updateStep('step3', 'completed');
+
+                // Success!
+                showSuccess(forkData);
+            } catch (err) {
+                console.error('Setup error:', err);
+                showError(err.message || 'An unexpected error occurred during setup.');
+            }
+        }
+
+        async function exchangeCodeForToken(code) {
+            // Since we can't expose the client secret in frontend code,
+            // we need to use an OAuth proxy or alternative method
+            
+            if (OAUTH_PROXY_URL) {
+                // Use OAuth proxy
+                const response = await fetch(OAUTH_PROXY_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ code })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to exchange authorization code');
+                }
+
+                const data = await response.json();
+                return data.access_token;
+            } else {
+                // Fallback: Show instructions for manual token creation
+                throw new Error(
+                    'OAuth proxy not configured. Please create a Personal Access Token manually at ' +
+                    'https://github.com/settings/tokens/new with "public_repo" scope and use the manual setup.'
+                );
+            }
+        }
+
+        async function forkRepository(token) {
+            const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/forks`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    default_branch_only: false
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to fork repository');
+            }
+
+            return await response.json();
+        }
+
+        async function enableWorkflows(token, owner, repo) {
+            // Enable GitHub Actions workflows in the forked repo
+            try {
+                const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/permissions`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        enabled: true,
+                        allowed_actions: 'all'
+                    })
+                });
+
+                if (!response.ok) {
+                    console.warn('Could not enable workflows automatically');
+                }
+            } catch (err) {
+                console.warn('Workflow enablement failed:', err);
+                // Non-critical, continue anyway
+            }
+        }
+
+        function updateStep(stepId, status) {
+            const step = document.getElementById(stepId);
+            const checkmark = step.querySelector('.checkmark');
+            const statusText = step.querySelector('.step-status');
+
+            if (status === 'completed') {
+                checkmark.style.display = 'inline';
+                step.style.borderLeftColor = '#4CAF50';
+                step.style.background = '#e8f5e9';
+            } else if (status === 'in-progress') {
+                step.style.borderLeftColor = '#667eea';
+                step.style.background = '#f8f9ff';
+            }
+        }
+
+        function showSuccess(forkData) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('status').style.display = 'none';
+            
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <div class="success">
+                    <h2 style="margin-bottom: 15px;">🎉 Setup Complete!</h2>
+                    <p style="margin-bottom: 20px;">Your SeedGPT fork is ready. Next steps:</p>
+                    <ol style="text-align: left; margin-left: 20px; margin-bottom: 20px;">
+                        <li>Configure GitHub Secrets (ANTHROPIC_API_KEY, etc.)</li>
+                        <li>Enable GitHub Actions in your repository settings</li>
+                        <li>Create your first issue to start building</li>
+                    </ol>
+                    <a href="${forkData.html_url}" class="btn" target="_blank">
+                        View Your Repository
+                    </a>
+                    <a href="${forkData.html_url}/settings/secrets/actions" class="btn" target="_blank" style="background: #4CAF50; margin-left: 10px;">
+                        Configure Secrets
+                    </a>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('status').style.display = 'none';
+            
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <div class="error">
+                    <h2 style="margin-bottom: 15px;">❌ Setup Failed</h2>
+                    <p>${message}</p>
+                    <a href="index.html" class="btn" style="background: white; color: #333; margin-top: 20px;">
+                        Back to Home
+                    </a>
+                </div>
+            `;
+        }
+
+        // Start the OAuth callback process
+        handleOAuthCallback();
+    </script>
+</body>
+</html>

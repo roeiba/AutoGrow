@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guided Setup - SeedGPT</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+        }
+
+        .card h2 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .setup-options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .option-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: left;
+        }
+
+        .option-card:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+            transform: translateY(-2px);
+        }
+
+        .option-card.selected {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .option-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .option-card p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #666;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge.warning {
+            background: #ff9800;
+        }
+
+        .btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 15px 40px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: background 0.3s;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .btn-secondary:hover {
+            background: #f8f9ff;
+        }
+
+        .steps {
+            margin-top: 30px;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .step:last-child {
+            border-bottom: none;
+        }
+
+        .step-number {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .step-content h3 {
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .step-content p {
+            color: #666;
+            margin: 0;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .info-box h4 {
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+
+        .info-box p {
+            color: #555;
+            margin: 0;
+        }
+
+        .warning-box {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .warning-box h4 {
+            color: #f57c00;
+            margin-bottom: 10px;
+        }
+
+        .warning-box p {
+            color: #555;
+            margin: 0;
+        }
+
+        .back-link {
+            color: white;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            opacity: 0.9;
+            transition: opacity 0.3s;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .card {
+                padding: 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-link">
+            ← Back to Home
+        </a>
+
+        <header>
+            <h1>✨ Guided Setup</h1>
+            <p class="subtitle">Let's get your SeedGPT project up and running</p>
+        </header>
+
+        <!-- Setup Method Selection -->
+        <div class="card" id="methodSelection">
+            <h2>Choose Your Setup Method</h2>
+            <p>Select how you'd like to authenticate and fork SeedGPT:</p>
+
+            <div class="setup-options">
+                <div class="option-card" onclick="selectMethod('oauth')" id="oauth-option">
+                    <h3>
+                        🔐 GitHub OAuth
+                        <span class="badge">RECOMMENDED</span>
+                    </h3>
+                    <p>Authenticate with GitHub and automatically fork the repository. Quick and secure setup with one click.</p>
+                </div>
+
+                <div class="option-card" onclick="selectMethod('token')" id="token-option">
+                    <h3>
+                        🔑 Personal Access Token
+                        <span class="badge warning">MANUAL</span>
+                    </h3>
+                    <p>Use a GitHub Personal Access Token for more control. Requires manual token creation but works without OAuth setup.</p>
+                </div>
+
+                <div class="option-card" onclick="selectMethod('manual')" id="manual-option">
+                    <h3>
+                        ⚡ Manual Fork
+                    </h3>
+                    <p>Fork the repository directly on GitHub. You'll configure everything manually following our documentation.</p>
+                </div>
+            </div>
+
+            <button class="btn" onclick="proceedWithMethod()" id="proceedBtn" disabled style="margin-top: 30px;">
+                Continue
+            </button>
+        </div>
+
+        <!-- OAuth Flow -->
+        <div class="card" id="oauthFlow" style="display: none;">
+            <h2>🔐 GitHub OAuth Setup</h2>
+            
+            <div class="info-box">
+                <h4>ℹ️ What happens next?</h4>
+                <p>You'll be redirected to GitHub to authorize SeedGPT. We'll only request permission to fork public repositories on your behalf.</p>
+            </div>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Authorize with GitHub</h3>
+                        <p>Click the button below to authenticate with your GitHub account.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Automatic Fork</h3>
+                        <p>We'll automatically fork SeedGPT to your account.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Configure Secrets</h3>
+                        <p>Add your API keys and configure GitHub Actions.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" onclick="startOAuthFlow()" style="margin-top: 20px;">
+                Authorize with GitHub
+            </button>
+            <button class="btn btn-secondary" onclick="backToSelection()" style="margin-top: 10px;">
+                Back
+            </button>
+        </div>
+
+        <!-- Token Flow -->
+        <div class="card" id="tokenFlow" style="display: none;">
+            <h2>🔑 Personal Access Token Setup</h2>
+            
+            <div class="warning-box">
+                <h4>⚠️ Security Note</h4>
+                <p>Never share your Personal Access Token. It provides access to your GitHub account.</p>
+            </div>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Create a Personal Access Token</h3>
+                        <p>Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)</p>
+                        <a href="https://github.com/settings/tokens/new?scopes=public_repo,workflow&description=SeedGPT%20Setup" 
+                           target="_blank" 
+                           class="btn" 
+                           style="margin-top: 10px; display: inline-block; width: auto; padding: 10px 20px; font-size: 0.9rem;">
+                            Create Token on GitHub
+                        </a>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Required Scopes</h3>
+                        <p>Select these permissions: <code>public_repo</code>, <code>workflow</code></p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Fork Repository</h3>
+                        <p>We'll use your token to automatically fork SeedGPT.</p>
+                        <input type="password" 
+                               id="tokenInput" 
+                               placeholder="Paste your token here (ghp_...)" 
+                               style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-top: 10px; font-family: monospace;">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" onclick="forkWithToken()" style="margin-top: 20px;">
+                Fork Repository
+            </button>
+            <button class="btn btn-secondary" onclick="backToSelection()" style="margin-top: 10px;">
+                Back
+            </button>
+        </div>
+
+        <!-- Manual Flow -->
+        <div class="card" id="manualFlow" style="display: none;">
+            <h2>⚡ Manual Fork Setup</h2>
+            
+            <p>Follow these steps to manually set up SeedGPT:</p>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Fork the Repository</h3>
+                        <p>Click the button below to fork SeedGPT on GitHub.</p>
+                        <a href="https://github.com/roeiba/SeedGPT/fork" 
+                           target="_blank" 
+                           class="btn" 
+                           style="margin-top: 10px; display: inline-block; width: auto; padding: 10px 20px; font-size: 0.9rem;">
+                            Fork on GitHub
+                        </a>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Enable GitHub Actions</h3>
+                        <p>Go to your fork's Settings → Actions → General → Enable workflows</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Configure Secrets</h3>
+                        <p>Add required secrets: ANTHROPIC_API_KEY, GITHUB_TOKEN (auto-generated)</p>
+                        <a href="https://github.com/settings/tokens" 
+                           target="_blank" 
+                           style="color: #667eea; text-decoration: underline;">
+                            View Documentation
+                        </a>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Create Your First Issue</h3>
+                        <p>Open an issue in your fork to start building with AI!</p>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-secondary" onclick="backToSelection()" style="margin-top: 20px;">
+                Back
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const GITHUB_CLIENT_ID = 'Ov23liHWdpJUFKDq8Gxd'; // TODO: Replace with your actual Client ID
+        const REPO_OWNER = 'roeiba';
+        const REPO_NAME = 'SeedGPT';
+        const REDIRECT_URI = window.location.origin + '/SeedGPT/oauth-callback.html';
+
+        let selectedMethod = null;
+
+        function selectMethod(method) {
+            selectedMethod = method;
+            
+            // Update UI
+            document.querySelectorAll('.option-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            document.getElementById(`${method}-option`).classList.add('selected');
+            document.getElementById('proceedBtn').disabled = false;
+        }
+
+        function proceedWithMethod() {
+            if (!selectedMethod) return;
+
+            // Hide selection
+            document.getElementById('methodSelection').style.display = 'none';
+
+            // Show appropriate flow
+            if (selectedMethod === 'oauth') {
+                document.getElementById('oauthFlow').style.display = 'block';
+            } else if (selectedMethod === 'token') {
+                document.getElementById('tokenFlow').style.display = 'block';
+            } else if (selectedMethod === 'manual') {
+                document.getElementById('manualFlow').style.display = 'block';
+            }
+        }
+
+        function backToSelection() {
+            document.getElementById('methodSelection').style.display = 'block';
+            document.getElementById('oauthFlow').style.display = 'none';
+            document.getElementById('tokenFlow').style.display = 'none';
+            document.getElementById('manualFlow').style.display = 'none';
+        }
+
+        function startOAuthFlow() {
+            // Generate random state for CSRF protection
+            const state = generateRandomString(32);
+            sessionStorage.setItem('oauth_state', state);
+
+            // Build OAuth URL
+            const params = new URLSearchParams({
+                client_id: GITHUB_CLIENT_ID,
+                redirect_uri: REDIRECT_URI,
+                scope: 'public_repo workflow',
+                state: state,
+                allow_signup: 'true'
+            });
+
+            // Redirect to GitHub OAuth
+            window.location.href = `https://github.com/login/oauth/authorize?${params.toString()}`;
+        }
+
+        async function forkWithToken() {
+            const token = document.getElementById('tokenInput').value.trim();
+            
+            if (!token) {
+                alert('Please enter your Personal Access Token');
+                return;
+            }
+
+            if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+                alert('Invalid token format. GitHub tokens start with "ghp_" or "github_pat_"');
+                return;
+            }
+
+            try {
+                // Show loading state
+                const btn = event.target;
+                btn.disabled = true;
+                btn.textContent = 'Forking...';
+
+                // Fork the repository
+                const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/forks`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        default_branch_only: false
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to fork repository');
+                }
+
+                const forkData = await response.json();
+
+                // Success! Redirect to the fork
+                alert('✅ Successfully forked SeedGPT! Redirecting to your repository...');
+                window.location.href = forkData.html_url;
+            } catch (error) {
+                console.error('Fork error:', error);
+                alert(`❌ Error: ${error.message}`);
+                btn.disabled = false;
+                btn.textContent = 'Fork Repository';
+            }
+        }
+
+        function generateRandomString(length) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+    </script>
+</body>
+</html>

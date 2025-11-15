@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { Sparkles, Github, GitPullRequest, FileText, CheckCircle, XCircle, Loader2 } from 'lucide-react'
-import { useSandbox } from './hooks/useSandbox'
+import { useSeedPlanter } from './hooks/useSeedPlanter'
 
 function App() {
   const [projectIdea, setProjectIdea] = useState('')
-  const { createSandbox, progress, error, isCreating } = useSandbox()
+  const { plantProject, progress, error, isPlanting } = useSeedPlanter()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (projectIdea.trim().length < 10) {
       return
     }
-    await createSandbox(projectIdea)
+    await plantProject(projectIdea)
   }
 
   const getStatusIcon = (status) => {
@@ -64,7 +64,7 @@ function App() {
                     placeholder="E.g., A task management app for remote teams with real-time collaboration..."
                     value={projectIdea}
                     onChange={(e) => setProjectIdea(e.target.value)}
-                    disabled={isCreating}
+                    disabled={isPlanting}
                     minLength={10}
                     maxLength={500}
                   />
@@ -76,12 +76,12 @@ function App() {
                 <button
                   type="submit"
                   className="btn-primary w-full flex items-center justify-center gap-2"
-                  disabled={isCreating || projectIdea.trim().length < 10}
+                  disabled={isPlanting || projectIdea.trim().length < 10}
                 >
-                  {isCreating ? (
+                  {isPlanting ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Creating Sandbox...
+                      Planting Project...
                     </>
                   ) : (
                     <>
@@ -216,7 +216,7 @@ function App() {
               </div>
             )}
 
-            {!progress && !isCreating && (
+            {!progress && !isPlanting && (
               <div className="card text-center py-12">
                 <Sparkles className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500">

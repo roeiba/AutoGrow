@@ -62,5 +62,29 @@ class SeedPlanterConfig(BaseSettings):
     rate_limit_requests: int = Field(10, description="Max requests per window")
     rate_limit_window: int = Field(60, description="Rate limit window in seconds")
 
+    # Database Configuration
+    database_url: str = Field(
+        "sqlite:///./seedgpt.db",
+        description="Database connection URL (SQLite default, use PostgreSQL for production)"
+    )
+
+    # Authentication Configuration
+    secret_key: str = Field(
+        "your-secret-key-change-in-production",
+        description="Secret key for JWT tokens (MUST change in production)"
+    )
+    algorithm: str = Field("HS256", description="JWT algorithm")
+    access_token_expire_minutes: int = Field(
+        60 * 24 * 7,  # 7 days
+        description="Access token expiration in minutes"
+    )
+
+    # Stripe Configuration
+    stripe_secret_key: str = Field("", description="Stripe secret key")
+    stripe_publishable_key: str = Field("", description="Stripe publishable key")
+    stripe_webhook_secret: str = Field("", description="Stripe webhook signing secret")
+    stripe_pro_price_id: str = Field("", description="Stripe price ID for Pro tier")
+    stripe_enterprise_price_id: str = Field("", description="Stripe price ID for Enterprise tier")
+
 
 config = SeedPlanterConfig()

@@ -234,21 +234,6 @@ class PRFailureResolver:
                 logger.info(f"   ⏭️  SKIPPED: Is a draft PR")
                 continue
 
-            # Check if already claimed by this agent
-            try:
-                comments = list(get_pr_comments(pr))
-            except Exception as e:
-                github_error = get_exception_for_github_error(e, f"Failed to get comments for PR #{pr.number}")
-                logger.warning(f"   ⚠️  Failed to get comments: {github_error}")
-                continue
-
-            if any(
-                "PR Failure Resolver Agent" in c.body and "working on" in c.body.lower()
-                for c in comments
-            ):
-                logger.info(f"   ⏭️  SKIPPED: Already claimed by agent")
-                continue
-
             # Check if PR has failing checks or merge conflicts
             try:
                 # Check for merge conflicts
